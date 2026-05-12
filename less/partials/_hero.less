@@ -1,0 +1,106 @@
+
+
+.LinkRobinsBlog-topNav {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 16px 24px 0;
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    font-size: 0.85rem;
+
+    &-link {
+        color: var(--muted-color);
+        text-decoration: none;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        padding: 6px 4px;
+        border-bottom: 2px solid transparent;
+        transition: color 0.15s ease, border-color 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+
+        &:hover, &:focus {
+            color: var(--text-color);
+            text-decoration: none;
+        }
+
+        &.is-active {
+            color: var(--text-color);
+            border-bottom-color: var(--primary-color, currentColor);
+        }
+
+        .icon {
+            font-size: 0.95em;
+            opacity: 0.85;
+        }
+    }
+}
+
+.LinkRobinsBlog-hero {
+    padding: 32px 24px 64px;
+    text-align: center;
+    background: var(--body-bg);
+    border-bottom: 1px solid rgba(127, 127, 127, 0.12);
+
+    &-inner {
+        max-width: 720px;
+        margin: 0 auto;
+    }
+
+    &-title {
+        font-size: clamp(2rem, 4.5vw, 3.4rem);
+        line-height: 1.1;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin: 0 0 12px;
+        color: var(--heading-color, var(--text-color));
+    }
+
+    &-brand {
+        display: inline-block;
+        margin: 0 0 12px;
+        text-decoration: none;
+
+        &:hover, &:focus { text-decoration: none; }
+    }
+
+    &-logo {
+        max-height: 120px;
+        max-width: 400px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+
+        &--light {
+            display: inline-block;
+        }
+        &--dark {
+            display: none;
+        }
+    }
+
+    &-tagline {
+        font-size: clamp(1rem, 1.5vw, 1.25rem);
+        line-height: 1.45;
+        color: var(--muted-color);
+        margin: 0;
+    }
+}
+
+[data-theme="dark"] .LinkRobinsBlog-hero {
+    &-logo--light { display: none; }
+    &-logo--dark  { display: inline-block; }
+}
+
+@media (max-width: 600px) {
+    .LinkRobinsBlog-hero {
+        padding: 20px 18px 36px;
+    }
+    .LinkRobinsBlog-topNav {
+        padding: 12px 18px 0;
+        gap: 16px;
+        font-size: 0.8rem;
+    }
+}

@@ -1,0 +1,27 @@
+{
+    "name": "linkrobins/blog",
+    "description": "A Ghost Casper-inspired blog for Flarum 2.0. Promotes discussions in a configurable tag to blog posts with a full-width reading layout. Optionally serves as the forum's homepage.",
+    "type": "flarum-extension",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "flarum/core": "^2.0",
+        "flarum/tags": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "LinkRobins\\Blog\\": "src/"
+        }
+    },
+    "extra": {
+        "flarum-extension": {
+            "title": "Link Robins Blog",
+            "category": "feature",
+            "icon": {
+                "name": "fas fa-feather-alt",
+                "color": "#07adcc",
+                "backgroundColor": "#1a2535"
+            }
+        }
+    }
+}

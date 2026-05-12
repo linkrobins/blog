@@ -1,0 +1,85 @@
+
+
+.LinkRobinsBlog-comments {
+    max-width: 760px;
+    margin: 64px auto 80px;
+    padding: 0 24px;
+    border-top: 1px solid rgba(127, 127, 127, 0.15);
+
+    &-title {
+        font-size: 1.4rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        margin: 48px 0 24px;
+    }
+
+    &-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+
+        .CommentPost {
+            padding: 16px 0;
+            border-bottom: 1px solid rgba(127, 127, 127, 0.08);
+
+            &:last-child { border-bottom: 0; }
+        }
+    }
+
+    &--empty p {
+        color: var(--muted-color);
+        font-style: italic;
+        margin: 24px 0;
+    }
+
+    &-empty {
+        color: var(--muted-color);
+        font-style: italic;
+        margin: 0 0 24px;
+    }
+}
+
+.LinkRobinsBlog-replyButton {
+    margin-top: 32px;
+    background: var(--primary-color);
+    color: #fff;
+    font-weight: 600;
+    padding: 12px 24px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    &:hover, &:focus {
+        opacity: 0.9;
+        color: #fff;
+    }
+
+    .icon { color: #fff; }
+}
+
+.LinkRobinsBlog-loginPrompt {
+    margin-top: 32px;
+    padding: 20px;
+    text-align: center;
+    background: rgba(127, 127, 127, 0.06);
+    border-radius: 8px;
+
+    a {
+        color: var(--primary-color);
+        font-weight: 600;
+        text-decoration: none;
+
+        &:hover { text-decoration: underline; }
+    }
+}
+
+@media (max-width: 720px) {
+    .LinkRobinsBlog-comments {
+        padding: 0 18px;
+        margin: 40px auto 64px;
+    }
+}
