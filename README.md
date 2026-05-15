@@ -49,18 +49,11 @@ There is no shadow comment system. If you can moderate forum discussions, you ca
 
 ## Installation
 
-### From this repo (current path)
-
-Drop the extracted folder into your Flarum install's `packages/` directory, then:
-
 ```sh
-# from your Flarum root
-composer require linkrobins/blog @dev
+composer require linkrobins/blog
 php flarum migrate
 php flarum cache:clear
 ```
-
-(Your `composer.json` needs a path repository pointing at `packages/*`. Most Dokploy / docker-flarum setups already have this.)
 
 Then enable the extension from the admin extensions list.
 
