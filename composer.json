@@ -1,12 +1,11 @@
 {
     "name": "linkrobins/blog",
-    "description": "A Ghost Casper-inspired blog for Flarum 2.0. Promotes discussions in a configurable tag to blog posts with a full-width reading layout. Optionally serves as the forum's homepage.",
+    "description": "A Ghost-style standalone blog for Flarum. Admin-managed posts and categories, member-only post gating, comments as real Flarum discussions, and a built-in newsletter with broadcast over SMTP.",
     "type": "flarum-extension",
     "license": "MIT",
     "require": {
         "php": "^8.2",
-        "flarum/core": "^2.0",
-        "flarum/tags": "*"
+        "flarum/core": "^2.0"
     },
     "autoload": {
         "psr-4": {

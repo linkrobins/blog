@@ -1,30 +1,818 @@
-.LinkRobinsBlog-tagSlugsTextarea {
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.9rem;
-}
+.LinkRobinsBlog-admin {
+    padding-top: 30px;
+    padding-bottom: 30px;
 
-.LinkRobinsBlog-homepage-group {
-    margin-top: 8px;
-}
+    &-tabs {
+        display: flex;
+        gap: 4px;
+        margin-bottom: 24px;
+        border-bottom: 1px solid rgba(127, 127, 127, 0.18);
+    }
 
-.LinkRobinsBlog-homepage-row {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    margin-top: 8px;
+    &-tab {
+        background: transparent;
+        border: 0;
+        border-bottom: 2px solid transparent;
+        padding: 10px 16px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--muted-color);
+        cursor: pointer;
+        font-family: inherit;
+        transition: color 0.15s ease, border-color 0.15s ease;
 
-    .Button {
-        flex: 0 0 auto;
-        white-space: nowrap;
+        i { margin-right: 6px; }
+
+        &:hover:not(:disabled), &:focus:not(:disabled) {
+            color: var(--text-color);
+        }
+
+        &.is-active {
+            color: var(--text-color);
+            border-bottom-color: @primary-color;
+        }
+
+        &.is-disabled, &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    }
+
+    &-tab-hint {
+        font-size: 0.75em;
+        font-weight: 400;
+        opacity: 0.7;
+        text-transform: lowercase;
+    }
+
+    &-loading,
+    &-empty {
+        padding: 32px;
+        text-align: center;
+        color: var(--muted-color);
+    }
+
+    &-postsHeader {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+
+        h3 { margin: 0; }
+    }
+
+    &-postsTable {
+        width: 100%;
+        border-collapse: collapse;
+
+        th, td {
+            text-align: left;
+            padding: 12px 10px;
+            border-bottom: 1px solid rgba(127, 127, 127, 0.12);
+            vertical-align: top;
+        }
+
+        th {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--muted-color);
+            font-weight: 700;
+        }
+
+        tbody tr:hover {
+            background: rgba(127, 127, 127, 0.04);
+        }
+
+        &-excerpt {
+            font-size: 0.85em;
+            color: var(--muted-color);
+            margin-top: 4px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+    }
+
+    &-badge {
+        display: inline-block;
+        padding: 3px 10px;
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+
+        &--published {
+            background: rgba(46, 160, 67, 0.12);
+            color: #2ea043;
+        }
+
+        &--draft {
+            background: rgba(204, 51, 51, 0.12);
+            color: #c33;
+        }
+    }
+
+    &-rowAction {
+        background: transparent;
+        border: 0;
+        padding: 4px 8px;
+        font-size: 0.85rem;
+        color: var(--muted-color);
+        cursor: pointer;
+        font-family: inherit;
+        border-radius: 4px;
+        transition: color 0.15s ease, background 0.15s ease;
+
+        i { margin-right: 4px; font-size: 0.85em; }
+
+        &:hover, &:focus {
+            color: var(--text-color);
+            background: rgba(127, 127, 127, 0.08);
+        }
+
+        &--danger:hover, &--danger:focus {
+            color: #c33;
+        }
     }
 }
 
-.LinkRobinsBlog-homepage-status {
-    flex: 1 1 auto;
-    color: var(--muted-color);
-    font-size: 0.9rem;
+.LinkRobinsBlog-editorModal {
+    &.modal-dialog {
+        max-width: 920px;
+    }
+}
 
-    .fa-check-circle {
-        color: var(--alert-success-color, #23a55a);
+.LinkRobinsBlog-editor {
+    .Form-body {
+        --gap: 18px;
+        gap: 18px;
+
+        > * { width: 100%; }
+    }
+
+    &-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: start;
+        margin-bottom: 0;
+    }
+
+    &-bodyWrapper {
+        // Container for toolbar + textarea — kept flush so they read as one unit
+        display: block;
+        width: 100%;
+    }
+
+    &-bodyGroup {
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+
+    &-optional {
+        font-weight: normal;
+        opacity: 0.6;
+        font-size: 0.85em;
+    }
+
+    &-coverPreview {
+        margin-top: 8px;
+        width: 320px;
+        height: 180px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: rgba(127, 127, 127, 0.08);
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+    }
+
+    &-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+        background: rgba(127, 127, 127, 0.06);
+        padding: 6px 8px;
+        border-radius: 6px 6px 0 0;
+        border: 1px solid rgba(127, 127, 127, 0.18);
+        border-bottom: 0;
+        margin-bottom: 0;
+    }
+
+    &-toolbarBtn {
+        background: transparent;
+        border: 0;
+        width: 32px;
+        height: 32px;
+        border-radius: 4px;
+        cursor: pointer;
+        color: var(--text-color);
+        font-family: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s ease;
+
+        &:hover:not(:disabled), &:focus:not(:disabled) {
+            background: rgba(127, 127, 127, 0.12);
+        }
+
+        &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+
+    &-bodyInput {
+        font-family: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+        font-size: 0.95em;
+        line-height: 1.55;
+        border-radius: 0 0 6px 6px;
+        resize: vertical;
+        min-height: 360px;
+        width: 100%;
+        display: block;
+        margin-top: -1px;
+    }
+
+    &-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(127, 127, 127, 0.12);
+    }
+
+    &-actions-primary {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    &-deleteBtn {
+        color: var(--muted-color);
+
+        &:hover, &:focus {
+            color: var(--alert-error-color, #d9534f);
+            background: transparent;
+        }
+    }
+}
+
+@media (max-width: 700px) {
+    .LinkRobinsBlog-editor-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.LinkRobinsBlog-settings {
+    .Form-body {
+        --gap: 32px;
+        gap: 32px;
+    }
+
+    &-section {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 0;
+        margin: 0;
+        border: 0;
+
+        > legend {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-color);
+            padding: 0 0 8px 0;
+            margin: 0 0 4px 0;
+            border-bottom: 1px solid rgba(127, 127, 127, 0.12);
+            width: 100%;
+        }
+
+        > .Form-group { width: 100%; margin: 0; }
+    }
+
+    // Hero background image field: URL input + upload button on one row,
+    // with a small fixed-size preview below (mirrors the post editor's
+    // cover-image preview so the admin UI stays consistent).
+    &-heroBgInputRow {
+        display: flex;
+        gap: 8px;
+        align-items: stretch;
+
+        input[type="url"] {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+
+    &-heroBgUploadBtn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    &-heroBgPreview {
+        margin-top: 8px;
+        width: 320px;
+        height: 120px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: rgba(127, 127, 127, 0.08);
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+    }
+
+    &-actions {
+        margin-top: 24px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(127, 127, 127, 0.12);
+        display: flex;
+        justify-content: flex-end;
+    }
+}
+
+// Categories tab
+.LinkRobinsBlog-admin-categoriesTable {
+    .LinkRobinsBlog-admin-categoryPosCell {
+        width: 48px;
+        color: var(--muted-color);
+        font-variant-numeric: tabular-nums;
+        font-size: 0.9em;
+    }
+
+    .LinkRobinsBlog-admin-categorySlugCell {
+        font-size: 0.88em;
+        color: var(--muted-color);
+
+        code {
+            background: rgba(127, 127, 127, 0.08);
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.92em;
+        }
+    }
+
+    .LinkRobinsBlog-admin-categoryNameCell {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .LinkRobinsBlog-admin-categorySwatch {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        color: #fff;
+        flex-shrink: 0;
+    }
+
+    .LinkRobinsBlog-admin-categorySwatch-icon {
+        font-size: 12px;
+        opacity: 0.95;
+    }
+
+    .LinkRobinsBlog-admin-categoryName {
+        font-weight: 600;
+    }
+
+    .LinkRobinsBlog-admin-categoryDesc {
+        color: var(--muted-color);
+        font-size: 0.88em;
+        font-weight: normal;
+    }
+}
+
+// Category editor modal
+.LinkRobinsBlog-categoryEditorModal .Modal-body {
+    padding-bottom: 16px;
+}
+
+.LinkRobinsBlog-categoryEditor {
+    &-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+
+        @media (max-width: 600px) {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    &-colorRow,
+    &-iconRow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    &-colorPicker {
+        width: 42px;
+        height: 38px;
+        padding: 0;
+        border: 1px solid rgba(127, 127, 127, 0.25);
+        border-radius: 6px;
+        background: transparent;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    &-iconPreview {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 6px;
+        background: rgba(127, 127, 127, 0.10);
+        color: var(--text-color);
+        flex-shrink: 0;
+        font-size: 14px;
+    }
+
+    &-actions {
+        margin-top: 24px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(127, 127, 127, 0.12);
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+}
+
+// Cover image upload UI inside the Post editor
+.LinkRobinsBlog-editor-coverGroup {
+    .LinkRobinsBlog-editor-coverInputRow {
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+
+        > .FormControl {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+
+    .LinkRobinsBlog-editor-coverUploadBtn {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+    .LinkRobinsBlog-editor-coverUploadIcon {
+        font-size: 0.9em;
+    }
+}
+
+// Body editor: toolbar separator + upload button + progress
+.LinkRobinsBlog-editor-toolbarSep {
+    display: inline-block;
+    width: 1px;
+    height: 18px;
+    background: rgba(127, 127, 127, 0.25);
+    margin: 0 6px;
+    vertical-align: middle;
+}
+
+.LinkRobinsBlog-editor-toolbarBtn--upload {
+    color: var(--primary-color, currentColor);
+}
+
+.LinkRobinsBlog-editor-bodyUploadStatus {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(127, 127, 127, 0.08);
+    color: var(--muted-color);
+    border-radius: 6px;
+    font-size: 0.9em;
+}
+
+.LinkRobinsBlog-editor-bodyUploadError {
+    margin-top: 8px;
+}
+
+// Comments toggle in post editor
+.LinkRobinsBlog-editor-commentsToggle {
+    &-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        padding: 10px 0;
+        font-weight: normal;
+
+        input[type="checkbox"] {
+            margin: 0;
+            flex-shrink: 0;
+        }
+    }
+}
+
+// Reports tab
+.LinkRobinsBlog-admin-tab-badge {
+    display: inline-block;
+    margin-left: 6px;
+    min-width: 18px;
+    padding: 1px 6px;
+    border-radius: 9px;
+    background: #d9534f;
+    color: #fff;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+    line-height: 1.4;
+}
+
+.LinkRobinsBlog-admin-reports {
+    padding: 16px 0;
+}
+
+.LinkRobinsBlog-admin-reportsHeader {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+
+    h3 {
+        margin: 0;
+        flex-shrink: 0;
+    }
+}
+
+.LinkRobinsBlog-admin-reportsFilters {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    flex: 1;
+}
+
+.LinkRobinsBlog-admin-reportsFilter {
+    padding: 5px 12px;
+    border-radius: 14px;
+    background: rgba(127, 127, 127, 0.1);
+    border: 1px solid transparent;
+    color: var(--text-color, inherit);
+    cursor: pointer;
+    font-size: 0.88rem;
+    transition: background 120ms ease, border-color 120ms ease;
+
+    &:hover { background: rgba(127, 127, 127, 0.18); }
+
+    &.is-active {
+        background: var(--primary-color, #ff7e5f);
+        color: #fff;
+    }
+}
+
+.LinkRobinsBlog-admin-reportsRefresh {
+    flex-shrink: 0;
+}
+
+.LinkRobinsBlog-admin-reportsTable {
+    width: 100%;
+    border-collapse: collapse;
+
+    th, td {
+        padding: 12px 10px;
+        vertical-align: top;
+        border-bottom: 1px solid rgba(127, 127, 127, 0.16);
+        font-size: 0.92rem;
+    }
+    th {
+        text-align: left;
+        font-weight: 700;
+        color: var(--muted-color);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+}
+
+.LinkRobinsBlog-admin-reportsCommentAuthor {
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+.LinkRobinsBlog-admin-reportsCommentBody {
+    color: var(--muted-color);
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.LinkRobinsBlog-admin-reportsMuted {
+    color: var(--muted-color);
+    font-style: italic;
+}
+
+.LinkRobinsBlog-admin-reportsStatus {
+    display: inline-block;
+    padding: 3px 9px;
+    border-radius: 10px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+
+    &.is-open      { background: rgba(217, 83, 79, 0.18);  color: #d9534f; }
+    &.is-resolved  { background: rgba(67, 160, 71, 0.18);  color: #43a047; }
+    &.is-dismissed { background: rgba(127, 127, 127, 0.16); color: var(--muted-color); }
+}
+
+.Button--small {
+    padding: 4px 10px;
+    font-size: 0.85rem;
+}
+.Button--danger {
+    background: #d9534f;
+    color: #fff;
+    &:hover { background: #c9302c; }
+}
+.Button--flat {
+    background: transparent;
+}
+
+// Reports tab — flag-style card list
+.LinkRobinsBlog-admin-reportsHelp {
+    flex: 1;
+    color: var(--muted-color);
+    font-size: 0.92rem;
+}
+
+.LinkRobinsBlog-admin-reportsList {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.LinkRobinsBlog-admin-reportCard {
+    background: rgba(127, 127, 127, 0.04);
+    border: 1px solid rgba(127, 127, 127, 0.16);
+    border-radius: 10px;
+    padding: 16px 18px;
+
+    &-header {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+        flex-wrap: wrap;
+    }
+
+    &-meta {
+        font-size: 0.95rem;
+
+        a {
+            color: var(--primary-color, currentColor);
+            text-decoration: none;
+
+            &:hover { text-decoration: underline; }
+        }
+    }
+
+    &-count {
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 3px 10px;
+        border-radius: 10px;
+        background: rgba(217, 83, 79, 0.18);
+        color: #d9534f;
+    }
+
+    &-comment {
+        margin: 0 0 12px;
+        padding: 10px 14px;
+        border-left: 3px solid var(--primary-color, #ff7e5f);
+        background: rgba(127, 127, 127, 0.06);
+        font-style: italic;
+        color: var(--text-color);
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 0.93rem;
+        line-height: 1.5;
+    }
+
+    &-reasons {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    &-reason {
+        font-size: 0.9rem;
+        line-height: 1.45;
+
+        i { color: var(--primary-color, #ff7e5f); margin-right: 4px; }
+    }
+
+    &-reasonDetail {
+        margin-top: 4px;
+        margin-left: 18px;
+        color: var(--muted-color);
+        font-style: italic;
+    }
+
+    &-reasonTime {
+        margin-top: 2px;
+        margin-left: 18px;
+        color: var(--muted-color);
+        font-size: 0.78rem;
+    }
+
+    &-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+}
+
+.LinkRobinsBlog-admin-subscribers {
+    &-header {
+        margin-bottom: 18px;
+
+        h2 {
+            margin: 0 0 6px;
+            font-size: 1.3rem;
+        }
+    }
+
+    &-blurb {
+        color: var(--muted-color);
+        font-size: 0.92rem;
+        line-height: 1.55;
+        margin: 0;
+        max-width: 640px;
+    }
+
+    &-stats {
+        display: flex;
+        gap: 16px;
+        margin: 18px 0;
+    }
+
+    &-stat {
+        background: rgba(127, 127, 127, 0.06);
+        border-radius: 8px;
+        padding: 14px 18px;
+        min-width: 140px;
+    }
+
+    &-statLabel {
+        font-size: 0.78rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted-color);
+    }
+
+    &-statValue {
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin-top: 4px;
+    }
+
+    &-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 8px;
+    }
+}
+
+.LinkRobinsBlog-editor-newsletter {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(127, 127, 127, 0.18);
+
+    legend {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+
+    &-actions {
+        margin-top: 10px;
     }
 }

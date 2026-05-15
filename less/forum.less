@@ -1,7 +1,913 @@
+// When viewing a blog page, keep the standard Flarum chrome:
+// the sidebar slot is used for our own category navigation,
+// and the container/page-pane structure renders normally.
+html.LinkRobinsBlogActive {
+    .IndexPage-toolbar {
+        display: none !important;
+    }
+}
 
+.LinkRobinsBlog {
+    background: var(--body-bg);
+    color: var(--text-color);
+    min-height: 100vh;
 
-@import "partials/_layout";
-@import "partials/_hero";
-@import "partials/_cards";
-@import "partials/_post";
-@import "partials/_comments";
+    &--loading,
+    &-empty {
+        padding: 80px 24px;
+        text-align: center;
+        color: var(--muted-color);
+    }
+}
+
+.LinkRobinsBlog-hero {
+    padding: 32px 0 56px;
+    text-align: center;
+    background: var(--body-bg);
+    border-bottom: 1px solid rgba(127, 127, 127, 0.12);
+
+    > .container {
+        max-width: 720px;
+    }
+
+    &--withBg {
+        background-color: var(--body-bg);
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        border-bottom: 0;
+        color: #fff;
+        padding: 56px 0 72px;
+    }
+
+    &--withBg .LinkRobinsBlog-hero-title,
+    &--withBg .LinkRobinsBlog-hero-tagline,
+    &--withBg .LinkRobinsBlog-hero-brand {
+        color: #fff;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    }
+
+    &-inner {
+        max-width: 720px;
+        margin: 0 auto;
+    }
+
+    &-title {
+        font-size: clamp(2rem, 4.5vw, 3rem);
+        line-height: 1.15;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin: 0 0 12px;
+        color: var(--heading-color, var(--text-color));
+    }
+
+    &-brand {
+        display: inline-block;
+        margin: 0 0 12px;
+        text-decoration: none;
+
+        &:hover, &:focus { text-decoration: none; }
+    }
+
+    &-logo {
+        max-height: 120px;
+        max-width: 400px;
+        width: auto;
+        height: auto;
+        object-fit: contain;
+
+        &--light { display: inline-block; }
+        &--dark  { display: none; }
+    }
+
+    &-tagline {
+        font-size: clamp(1rem, 1.5vw, 1.25rem);
+        line-height: 1.45;
+        color: var(--muted-color);
+        margin: 0 0 8px;
+    }
+}
+
+[data-theme="dark"] .LinkRobinsBlog-hero {
+    &-logo--light { display: none; }
+    &-logo--dark  { display: inline-block; }
+}
+
+// Category-specific accents inside Flarum's standard sideNav/SelectDropdown chrome.
+// Flarum's common/sideNav.less handles layout (desktop list, mobile center-of-header
+// dropdown via App-titleControl), so we only style what's blog-specific.
+.LinkRobinsBlog-sidebar {
+    .LinkRobinsBlog-sidebar-categoryLink {
+        .Button-icon {
+            color: var(--blog-cat-color, currentColor);
+        }
+    }
+}
+
+// Subscribe primary button at the top of the blog sidebar.
+.LinkRobinsBlog-subscribeButton {
+    .Button-icon {
+        color: inherit;
+    }
+}
+
+// Section heading inside the sidebar nav (e.g. "Categories").
+.LinkRobinsBlog-sidebar-sectionHeading {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--muted-color);
+    margin: 18px 0 6px 10px;
+    line-height: 1.4;
+    pointer-events: none;
+}
+
+// Sidebar blocks (About, future widgets) rendered below the nav.
+.LinkRobinsBlog-blocks {
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+// Two instances are rendered: one inside the sidebar (desktop), one after page
+// content (mobile/tablet). Show only the relevant one for the viewport.
+.LinkRobinsBlog-blocks--sidebar  { display: none; }
+.LinkRobinsBlog-blocks--mobile   { display: flex; margin: 32px 0 0; padding-top: 24px; border-top: 1px solid rgba(127, 127, 127, 0.18); }
+
+@media (min-width: 768px) {
+    .LinkRobinsBlog-blocks--sidebar { display: flex; }
+    .LinkRobinsBlog-blocks--mobile  { display: none; }
+}
+
+.LinkRobinsBlog-block {
+    &-title {
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--muted-color);
+        margin: 0 0 8px;
+    }
+
+    &-body {
+        font-size: 0.92rem;
+        line-height: 1.55;
+        color: var(--text-color);
+
+        p:first-child { margin-top: 0; }
+        p:last-child  { margin-bottom: 0; }
+
+        a {
+            color: var(--link-color, var(--primary-color));
+        }
+    }
+}
+
+// Section heading in dropdown form on mobile — Flarum's SelectDropdown filters
+// non-anchor/button tags out of the active-child label calculation, so the h4
+// renders inline as a separator-style heading.
+.sideNav .Dropdown--select .Dropdown-menu > li > .LinkRobinsBlog-sidebar-sectionHeading {
+    margin: 12px 0 4px 0;
+    padding: 0 15px;
+}
+
+// Blog page wrappers (override standard IndexPage margins/widths slightly)
+.LinkRobinsBlog-page {
+    .Page-hero {
+        margin-bottom: 0;
+    }
+}
+
+.LinkRobinsBlog-featured {
+    margin: 0 0 32px;
+    padding: 0;
+
+    &-card {
+        display: block;
+        position: relative;
+        border-radius: 12px;
+        overflow: hidden;
+        text-decoration: none;
+        color: var(--text-color);
+        background-color: rgba(127, 127, 127, 0.06);
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        min-height: 420px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+        &:hover, &:focus {
+            text-decoration: none;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+        }
+
+        &.has-cover {
+            background-color: rgba(0, 0, 0, 0.45);
+        }
+
+        &.no-cover {
+            background-image: linear-gradient(135deg, fade(@primary-color, 50%) 0%, fade(@primary-color, 15%) 100%);
+        }
+    }
+
+    &-inner {
+        position: absolute;
+        inset: auto 0 0 0;
+        padding: 32px 36px;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.55) 60%, rgba(0, 0, 0, 0) 100%);
+        color: #fff;
+    }
+
+    &-title {
+        font-size: clamp(1.75rem, 3vw, 2.5rem);
+        line-height: 1.15;
+        font-weight: 800;
+        margin: 0 0 12px;
+        color: #fff;
+    }
+}
+
+.LinkRobinsBlog-grid {
+    margin: 0 0 60px;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 36px 28px;
+}
+
+@media (min-width: 1200px) {
+    .LinkRobinsBlog-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.LinkRobinsBlog-card {
+    display: flex;
+    flex-direction: column;
+    text-decoration: none;
+    color: var(--text-color);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+    &:hover, &:focus {
+        text-decoration: none;
+        color: var(--text-color);
+        transform: translateY(-3px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+    }
+
+    &-cover {
+        aspect-ratio: 16 / 9;
+        background: rgba(127, 127, 127, 0.08);
+        overflow: hidden;
+        position: relative;
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        &.no-cover {
+            background: linear-gradient(135deg, fade(@primary-color, 35%) 0%, fade(@primary-color, 10%) 100%);
+        }
+    }
+
+    &-body {
+        padding: 18px 4px 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    &-title {
+        font-size: 1.3rem;
+        line-height: 1.25;
+        font-weight: 700;
+        margin: 0 0 10px;
+        color: var(--heading-color, var(--text-color));
+    }
+}
+
+.LinkRobinsBlog-tags {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 6px;
+}
+
+.LinkRobinsBlog-tag {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+    cursor: pointer;
+
+    &:hover, &:focus {
+        opacity: 0.7;
+        text-decoration: none;
+    }
+}
+
+.LinkRobinsBlog-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--muted-color);
+    margin-top: auto;
+
+    &-author { font-weight: 600; }
+    &-dot    { opacity: 0.5; }
+    &-badge  {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: rgba(127, 127, 127, 0.12);
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+
+        i { font-size: 0.85em; }
+    }
+}
+
+.LinkRobinsBlog-loadMore {
+    max-width: 1280px;
+    margin: -32px auto 80px;
+    padding: 0 24px;
+    text-align: center;
+
+    &-sentinel {
+        width: 1px;
+        height: 1px;
+        margin: 0 auto;
+    }
+
+    &-spinner {
+        padding: 16px 0;
+        color: var(--muted-color);
+        font-size: 1.25rem;
+    }
+
+    &-button {
+        background: transparent;
+        color: var(--text-color);
+        border: 1px solid rgba(127, 127, 127, 0.3);
+        border-radius: 6px;
+        padding: 10px 24px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+
+        &:hover, &:focus {
+            border-color: @primary-color;
+            background: rgba(127, 127, 127, 0.04);
+        }
+    }
+}
+
+.LinkRobinsBlog--post {
+    .LinkRobinsBlog-post {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 16px 0 24px;
+    }
+
+    .LinkRobinsBlog-post-header {
+        text-align: center;
+        margin-bottom: 36px;
+        position: relative;
+    }
+
+    .LinkRobinsBlog-post-tags {
+        justify-content: center;
+        margin-bottom: 12px;
+    }
+
+    .LinkRobinsBlog-post-title {
+        font-family: inherit;
+        font-size: 1.85em;
+        line-height: 1.3;
+        font-weight: 600;
+        letter-spacing: normal;
+        margin: 0 0 16px;
+        color: var(--heading-color, var(--text-color));
+    }
+
+    .LinkRobinsBlog-post-excerpt {
+        font-size: 1.15rem;
+        line-height: 1.5;
+        color: var(--muted-color);
+        margin: 0 0 20px;
+    }
+
+    .LinkRobinsBlog-post-meta {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-size: 0.9rem;
+        color: var(--muted-color);
+
+        &-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        &-author { font-weight: 600; color: var(--text-color); }
+    }
+
+    .LinkRobinsBlog-post-cover {
+        margin: 0 0 40px;
+        padding: 0;
+
+        img {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 12px;
+            max-height: 720px;
+            object-fit: cover;
+        }
+    }
+
+    .LinkRobinsBlog-post-body {
+        font-size: 1.1rem;
+        line-height: 1.7;
+
+        p, ul, ol, blockquote, pre, h2, h3, h4, figure {
+            margin: 0 0 1.4em;
+        }
+
+        h2 {
+            font-size: 1.6rem;
+            font-weight: 700;
+            margin-top: 1.8em;
+            margin-bottom: 0.6em;
+            line-height: 1.2;
+        }
+
+        h3 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-top: 1.6em;
+            margin-bottom: 0.5em;
+            line-height: 1.25;
+        }
+
+        img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 6px;
+        }
+
+        blockquote {
+            border-left: 3px solid @primary-color;
+            padding: 0.4em 0 0.4em 1.4em;
+            color: var(--muted-color);
+            font-style: italic;
+        }
+
+        pre, code {
+            font-family: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+            font-size: 0.95em;
+        }
+
+        pre {
+            background: rgba(127, 127, 127, 0.08);
+            padding: 1em;
+            border-radius: 6px;
+            overflow-x: auto;
+        }
+    }
+}
+
+.LinkRobinsBlog-teaser {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    color: var(--text-color);
+    margin: 0 0 32px;
+    padding-bottom: 32px;
+    border-bottom: 1px solid rgba(127, 127, 127, 0.16);
+
+    p { margin: 0; }
+}
+
+.LinkRobinsBlog-memberWall {
+    text-align: center;
+    padding: 48px 24px;
+    background: rgba(127, 127, 127, 0.06);
+    border-radius: 12px;
+    margin: 0 0 32px;
+
+    &-icon {
+        font-size: 2rem;
+        color: @primary-color;
+        margin-bottom: 16px;
+    }
+
+    &-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin: 0 0 8px;
+    }
+
+    &-text {
+        color: var(--muted-color);
+        margin: 0 0 20px;
+        font-size: 1rem;
+    }
+}
+
+// "You may also like" recommendations at the end of an article. Grid of up
+// to 3 cards: cover image, category tag, title, date. Mirrors the blog index
+// card layout at a smaller scale so the visual language is consistent.
+.LinkRobinsBlog-related {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 0 0;
+    border-top: 1px solid rgba(127, 127, 127, 0.16);
+
+    // When the comments card sits directly above us (the usual layout: body
+    // -> comments -> related), the comments section's own border-top is the
+    // seam -- we drop ours to avoid stacking two dividers.
+    .LinkRobinsBlog-comments + & {
+        border-top: 0;
+        padding-top: 0;
+    }
+
+    &-heading {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin: 0 0 18px;
+        color: var(--muted-color);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    &-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 18px;
+
+        @media (max-width: 720px) {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    &-card {
+        display: flex;
+        flex-direction: column;
+        text-decoration: none;
+        color: inherit;
+        border-radius: 10px;
+        overflow: hidden;
+        background: rgba(127, 127, 127, 0.04);
+        border: 1px solid rgba(127, 127, 127, 0.12);
+        transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+
+        &:hover, &:focus {
+            border-color: rgba(127, 127, 127, 0.28);
+            text-decoration: none;
+            color: inherit;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+        }
+    }
+
+    &-cover {
+        aspect-ratio: 16 / 9;
+        background: rgba(127, 127, 127, 0.08);
+        overflow: hidden;
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+
+        &.no-cover {
+            background: linear-gradient(135deg,
+                rgba(127, 127, 127, 0.10),
+                rgba(127, 127, 127, 0.04));
+        }
+    }
+
+    &-body {
+        padding: 12px 14px 14px;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    &-tag {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+
+    &-title {
+        font-size: 0.98rem;
+        font-weight: 600;
+        line-height: 1.35;
+        margin: 0;
+        // Clamp to two lines so unevenly-titled cards stay aligned.
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    &-date {
+        font-size: 0.8rem;
+        color: var(--muted-color);
+    }
+}
+
+.LinkRobinsBlog-comments {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 32px 0 64px;
+    border-top: 1px solid rgba(127, 127, 127, 0.16);
+
+    &-loading {
+        color: var(--muted-color);
+        padding: 16px 0;
+    }
+
+    &--disabled {
+        padding: 24px 0 48px;
+    }
+
+    &-disabledNote {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted-color);
+        font-size: 0.95rem;
+        padding: 14px 16px;
+        background: rgba(127, 127, 127, 0.06);
+        border-radius: 8px;
+
+        i { font-size: 0.95em; }
+    }
+
+    // Wide rounded "Ghost-style" card linking into the full conversation.
+    // Count on the left (icon + "N comments"), action on the right
+    // ("Read more comments →"). The conversation itself lives on the
+    // linked Flarum discussion -- this is the entry point.
+    &-link {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 22px;
+        border: 1px solid rgba(127, 127, 127, 0.22);
+        border-radius: 10px;
+        background: rgba(127, 127, 127, 0.04);
+        text-decoration: none;
+        color: var(--text-color);
+        transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+
+        &:hover, &:focus {
+            border-color: @primary-color;
+            background: rgba(127, 127, 127, 0.07);
+            text-decoration: none;
+            color: var(--text-color);
+        }
+
+        &:active { transform: translateY(1px); }
+    }
+
+    &-linkCount {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 1.05rem;
+        font-weight: 600;
+
+        i {
+            font-size: 1.1em;
+            opacity: 0.75;
+        }
+    }
+
+    &-linkAction {
+        color: @primary-color;
+        font-weight: 600;
+        font-size: 0.95rem;
+        white-space: nowrap;
+    }
+}
+
+.LinkRobinsBlog-post-actions {
+    position: absolute;
+    top: 0;
+    right: 0;
+
+    &-toggle {
+        background: transparent;
+        border: 1px solid rgba(127, 127, 127, 0.2);
+        border-radius: 6px;
+        width: 36px;
+        height: 36px;
+        color: var(--muted-color);
+        cursor: pointer;
+        transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+
+        &:hover, &:focus {
+            color: var(--text-color);
+            border-color: @primary-color;
+        }
+    }
+
+    &-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 6px);
+        min-width: 180px;
+        background: var(--body-bg);
+        border: 1px solid rgba(127, 127, 127, 0.18);
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.10);
+        padding: 4px;
+        z-index: 50;
+        text-align: left;
+    }
+
+    &-item {
+        display: block;
+        width: 100%;
+        text-align: left;
+        background: transparent;
+        border: 0;
+        padding: 8px 12px;
+        font-size: 0.9rem;
+        color: var(--text-color);
+        cursor: pointer;
+        border-radius: 4px;
+        font-family: inherit;
+        transition: background 0.15s ease, color 0.15s ease;
+
+        i { width: 14px; margin-right: 6px; opacity: 0.8; }
+
+        &:hover:not(:disabled), &:focus:not(:disabled) {
+            background: rgba(127, 127, 127, 0.08);
+        }
+
+        &:disabled { opacity: 0.5; cursor: default; }
+
+        &--danger {
+            color: #c33;
+            &:hover:not(:disabled), &:focus:not(:disabled) {
+                background: rgba(204, 51, 51, 0.08);
+            }
+        }
+    }
+}
+
+.LinkRobinsBlog-post-draftBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 12px;
+    padding: 4px 12px;
+    background: rgba(204, 51, 51, 0.1);
+    color: #c33;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+
+    i { font-size: 0.85em; }
+}
+
+.LinkRobinsBlog-post-meta-avatarLink {
+    line-height: 0;
+    display: inline-flex;
+    &:hover, &:focus { opacity: 0.85; }
+}
+
+.LinkRobinsBlog-meta-author:is(a),
+.LinkRobinsBlog-post-meta-author:is(a) {
+    text-decoration: none;
+    color: inherit;
+    transition: color 0.15s ease;
+
+    &:hover, &:focus {
+        color: @primary-color;
+        text-decoration: none;
+    }
+}
+
+@media (max-width: 900px) {
+    .LinkRobinsBlog-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 28px;
+    }
+}
+
+@media (max-width: 600px) {
+    .LinkRobinsBlog-hero {
+        padding: 20px 0 32px;
+    }
+    .LinkRobinsBlog-grid {
+        grid-template-columns: 1fr;
+        gap: 28px;
+    }
+    .LinkRobinsBlog-featured-card {
+        min-height: 320px;
+    }
+    .LinkRobinsBlog-featured-inner {
+        padding: 24px 22px;
+    }
+}
+
+// Report comment dialog overlay
+.LinkRobinsBlog-reportOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.LinkRobinsBlog-reportDialog {
+    background: var(--body-bg, #fff);
+    color: var(--text-color, inherit);
+    border: 1px solid rgba(127, 127, 127, 0.2);
+    border-radius: 10px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    width: 100%;
+    max-width: 480px;
+    padding: 22px 22px 18px;
+
+    &-title {
+        margin: 0 0 6px;
+        font-size: 1.15rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+
+        &::before {
+            content: "\f024"; // fa-flag
+            font-family: "Font Awesome 5 Free", "Font Awesome 6 Free", sans-serif;
+            font-weight: 900;
+            color: var(--primary-color, currentColor);
+        }
+    }
+
+    &-help {
+        margin: 0 0 12px;
+        color: var(--muted-color);
+        font-size: 0.92rem;
+    }
+
+    &-input {
+        width: 100%;
+        resize: vertical;
+        min-height: 90px;
+    }
+
+    &-success {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 14px 0;
+        color: var(--primary-color, currentColor);
+        font-weight: 600;
+
+        i { font-size: 1.1em; }
+    }
+
+    &-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 14px;
+    }
+}
+

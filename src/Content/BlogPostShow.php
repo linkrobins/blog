@@ -6,11 +6,10 @@ use Flarum\Api\JsonApi;
 use Flarum\Frontend\Document;
 use Flarum\Http\RequestUtil;
 use Flarum\Settings\SettingsRepositoryInterface;
-use Illuminate\Support\Arr;
 use LinkRobins\Blog\Api\Resource\BlogPostResource;
 use Psr\Http\Message\ServerRequestInterface;
 
-class BlogIndex
+class BlogPostShow
 {
     public function __construct(
         protected JsonApi $api,
@@ -20,21 +19,24 @@ class BlogIndex
 
     public function __invoke(Document $document, ServerRequestInterface $request): Document
     {
-        $page    = max(1, (int) Arr::get($request->getQueryParams(), 'page', 1));
-        $perPage = (int) $this->settings->get('linkrobins-blog.posts_per_page', 12);
-        if ($perPage < 1 || $perPage > 50) {
-            $perPage = 12;
+        $slug = $request->getAttribute('routeParameters')['slug'] ?? null;
+
+        if (! $slug) {
+            return $document;
         }
+
+        // URLs are /article/YYYY-MM-DD-{slug}; the stored slug is just the bare slug.
+        // Strip the optional date prefix so the API lookup matches.
+        $bareSlug = preg_replace('/^\d{4}-\d{2}-\d{2}-/', '', $slug);
 
         try {
             $apiDocument = $this->api
                 ->forResource(BlogPostResource::class)
-                ->forEndpoint('list')
+                ->forEndpoint('show')
                 ->process(
                     body: [],
                     internal: [
-                        'sort'    => '-publishedAt',
-                        'page'    => ['offset' => ($page - 1) * $perPage, 'limit' => $perPage],
+                        'id'      => $bareSlug,
                         'include' => 'user,category',
                     ],
                     options: [
@@ -43,16 +45,14 @@ class BlogIndex
                 );
 
             $document->payload['apiDocument'] = json_decode(json_encode($apiDocument), true);
+
+            $title = data_get($document->payload['apiDocument'], 'data.attributes.title');
+            if ($title) {
+                $document->title = $title;
+            }
         } catch (\Throwable $e) {
             $document->payload['apiDocument'] = null;
         }
-
-        $title = (string) $this->settings->get('linkrobins-blog.title', '');
-        if ($title === '') {
-            $title = (string) $this->settings->get('forum_title', 'Blog');
-        }
-
-        $document->title = $title;
 
         return $document;
     }

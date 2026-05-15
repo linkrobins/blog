@@ -1,62 +1,126 @@
 # Link Robins Blog
 
-A Ghost Casper-inspired blog for [Flarum 2.0](https://flarum.org). Promotes discussions in a configurable tag to blog posts with a full-width reading layout. Optionally serves as the forum's homepage.
+A Ghost-style blog for Flarum. Standalone post storage, member-only post gating, a clean reading layout, real Flarum discussions for comments, and a built-in newsletter with broadcast over your existing SMTP.
 
-## What it does
+---
 
-- Treats discussions in a designated tag (default: `blog`) as blog posts
-- Renders them on a **Casper-style index page** at `/blog` — full-width, no sidebar, hero header, featured post, three-column card grid
-- Renders each individual post in a **Casper-style reading layout** at `/blog/{id}-{slug}` — centered narrow column, generous typography, optional cover image breaking out of the column
-- Pulls excerpts and cover images automatically from the post body — first paragraph and first image
-- Shows the discussion's replies as comments below each blog post, using Flarum's existing comment rendering
-- Can serve as the forum's homepage at `/`, with the discussion list pushed to `/all`
+## Features
 
-## Requirements
+### Reader
 
-- Flarum **2.0** or later
-- PHP **8.2** or later
-- [`flarum/tags`](https://packagist.org/packages/flarum/tags) installed (blog posts are tagged discussions)
+- `/blog` — hero header (text / forum logo / custom image), featured first post in a large card, grid of remaining posts with pagination
+- `/article/{date}-{slug}` — centered reading column, optional cover image with credit line, body, comments, "Read more" recommendations from the same category
+- `/category/{slug}` — same layout as `/blog`, filtered to one category
+- Auto cover-image fallback to a gradient when no image is set
+- Theme-aware — picks up your forum's primary color
+
+### Member-only posts
+
+Posts marked `visibility: members` show the excerpt and a login-wall card to guests. Logged-in users (or only specific groups, configurable) see the full content. Search engines see only the excerpt.
+
+### Comments are real Flarum discussions
+
+Each blog post gets one normal Flarum discussion behind the scenes. Comments below the post are posts in that discussion. This means:
+
+- All standard Flarum moderation works out of the box — edit, delete, flag, hide, restore, mentions, likes (if installed), notifications, search
+- Replies inherit your existing permission groups, post throttling, BBCode/Markdown setup
+- The discussion is kept out of `/all` and other listings (so it doesn't clutter your forum) but is fully accessible via direct link and via the API
+- The first post of each discussion is an auto-generated "bookmark card" linking back to the blog article
+
+There is no shadow comment system. If you can moderate forum discussions, you can moderate blog comments.
+
+### Newsletter (built in)
+
+- One-click subscribe star button at the top of the blog sidebar (filled star = subscribed, outline = not). Logged-in users only.
+- Admin "Subscribers" tab with live count and CSV export of `email, username, subscribed_at` (RFC-4180 quoted, chunked for large lists)
+- "Send newsletter" button on the post editor — broadcasts via Flarum's configured SMTP to every current subscriber
+- Per-recipient `List-Unsubscribe` header so Gmail/Apple Mail show their built-in unsubscribe button in the inbox
+- Token-based public unsubscribe page — works from any device, no login required
+- `broadcast_sent_at` guard prevents accidental re-sends; explicit "Re-send" requires confirmation
+
+### Admin
+
+- Tabs for Posts, Categories, Subscribers, Settings
+- Full WYSIWYG-ish post editor with cover-image upload (fof/upload), excerpt, slug, category, visibility, and comments-enabled toggle
+- Custom HTML widget for arbitrary sidebar content (about blurb, social links, anything)
+- Configurable hero header per blog (text title, forum logo, or custom background image with overlay)
+
+---
 
 ## Installation
 
-```
-composer require linkrobins/blog
+### From this repo (current path)
+
+Drop the extracted folder into your Flarum install's `packages/` directory, then:
+
+```sh
+# from your Flarum root
+composer require linkrobins/blog @dev
+php flarum migrate
 php flarum cache:clear
 ```
 
-In Flarum admin → **Extensions**, find **Link Robins Blog** and enable it.
+(Your `composer.json` needs a path repository pointing at `packages/*`. Most Dokploy / docker-flarum setups already have this.)
 
-## Setup
+Then enable the extension from the admin extensions list.
 
-1. **Create a tag.** Go to **Admin → Tags** and create a new tag. The slug should match the "Blog tag slug" setting (default `blog`).
-2. **Configure the blog.** Go to **Admin → Extensions → Link Robins Blog** and set:
-   - **Blog tag slug** — must match the tag you just created
-   - **Blog title** — shown in the hero
-   - **Tagline** — one-line description under the title
-   - **Show featured post** — toggle the larger card above the grid
-3. **(Optional) Make the blog the homepage.** Use the "Make blog the homepage" button on the settings page. This sets Flarum's `default_route` setting to `/blog`. Visitors landing at `/` will see the blog index; the discussion list remains accessible at `/all`.
-4. **Write a post.** Start a new discussion and tag it with the blog tag. The first comment post is the blog body. Replies to the discussion become comments under the blog post.
+### Required Flarum
 
-## How it works under the hood
+Flarum core, recent. If your Flarum is old enough that `Extend\Routes('api')->post(...)` doesn't exist, this won't work; otherwise it should.
 
-- **Routes**: `/blog` and `/blog/{id}` are registered as forum frontend routes via `Extend\Frontend->route()` (JS side) and `Extend\Routes('forum')->get()` (server side). The server-side handlers pre-fetch the relevant discussions so SSR/SEO works.
-- **Data model**: blog posts are regular Flarum discussions filtered by tag. No new database tables. All of Flarum's machinery — search, permissions, notifications, formatter, tags — applies automatically.
-- **Excerpt and cover image**: two extra attributes (`linkrobinsBlogExcerpt`, `linkrobinsBlogCoverImage`) are added to the `DiscussionResource` API output. The excerpt is derived from the first paragraph of the first comment post; the cover image is the first `<img>` found in that body. If a post has no image, the card uses a subtle gradient placeholder.
-- **Full-width layout**: when a blog page mounts, JS adds `LinkRobinsBlogActive` to `<html>`. The LESS hides Flarum's sidebar and zeros out the surrounding container padding, then our own components render at full viewport width with their own max-content-width constraints.
-- **Comments**: the blog post page fetches the discussion with all its posts, renders the first comment post as the body, and renders subsequent comment posts using Flarum's own `CommentPost` component in a slimmer-styled list below.
+---
 
-## Homepage notes
+## Upgrading
 
-Setting the blog as the homepage works by changing Flarum's core `default_route` setting to `/blog`. This is a non-destructive change — the discussion list is *not* moved; it lives at `/all` by default in Flarum 2.0. Reverting via the same setting page restores the previous default route.
+This release adds:
 
-If you've installed other extensions that also touch `default_route`, the last one to write wins. Reactive monitoring of the setting is out of scope.
+- `linkrobins_blog_subscribers` table (newsletter subscribers)
+- `unsubscribe_token` column on subscribers
+- `broadcast_sent_at` column on `linkrobins_blog_posts`
 
-## Limitations / out of scope
+All three are applied by `php flarum migrate` after upgrading. The migrations are additive — no data is dropped or transformed.
 
-- No separate post-cover-image field — covers are derived from the first `<img>` in the body. If you want explicit covers, you'd need either an extension that adds an image field to discussions or a follow-up to this extension.
-- No standalone blog comment system — replies use Flarum's discussion model. The link/discussion view still works at `/d/{id}` for the full Flarum experience.
-- No multi-blog support — one blog per Flarum install. You can use sub-tags within the blog tag to categorize.
+---
+
+## Newsletter deliverability
+
+The extension sends mail via Flarum's configured SMTP. Whether those mails arrive in inboxes vs spam folders depends on your sending domain, not on this code:
+
+- **SPF, DKIM, DMARC** records on your sending domain matter. Without them, Gmail in particular will spam-folder your broadcasts.
+- For lists over ~50 subscribers, set Flarum's queue driver to `database` or `redis`. The default `sync` driver runs the broadcast inline in the admin's HTTP request, which will time out on larger lists.
+- The first time you broadcast, subscribe yourself first and check where the email lands. Mail-tester.com is a free way to grade your sending domain.
+
+---
+
+## Configuration
+
+All in **Admin → Extensions → Link Robins Blog → Settings**:
+
+- Blog title and tagline (displayed in the hero)
+- Nav label and icon for the "Blog" link in Flarum's main sidebar
+- Posts per page on the blog index
+- Header mode: text, forum logo, or custom background image (with overlay)
+- Members-only teaser length (characters of body shown to guests)
+- Custom HTML widget content for the blog sidebar
+
+---
+
+## API
+
+Mostly JSON:API for posts and categories. A few non-resource endpoints:
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/linkrobins-blog/subscription` | Current user's subscription state |
+| `POST` | `/api/linkrobins-blog/subscription` | Subscribe (idempotent) |
+| `DELETE` | `/api/linkrobins-blog/subscription` | Unsubscribe (idempotent) |
+| `GET` | `/api/linkrobins-blog/subscribers` | Admin: `{ count }` |
+| `GET` | `/api/linkrobins-blog/subscribers?format=csv` | Admin: CSV download |
+| `POST` | `/api/linkrobins-blog/posts/{id}/broadcast` | Admin: trigger newsletter send (`?force=1` to re-broadcast) |
+| `GET` | `/linkrobins-blog/unsubscribe/{token}` | Public token-based unsubscribe |
+
+---
 
 ## License
 
-MIT
+MIT.
