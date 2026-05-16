@@ -17,7 +17,7 @@
             "title": "Link Robins Blog",
             "category": "feature",
             "icon": {
-                "name": "fas fa-feather-alt",
+                "name": "fas fa-ghost",
                 "color": "#07adcc",
                 "backgroundColor": "#1a2535"
             }

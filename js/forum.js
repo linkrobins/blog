@@ -63,6 +63,19 @@
         return def === blogIndexRoute();
     }
 
+    // Drafts route detection. We use Mithril's m.route.get() rather than
+    // window.location because m.route.get() reflects Mithril's current
+    // route regardless of how Flarum is mounted (history vs hash).
+    function isDraftsRoute() {
+        try {
+            var route = (typeof m !== 'undefined' && m.route && m.route.get && m.route.get()) || '';
+            if (typeof route !== 'string') return false;
+            // Match /blog/drafts or /blog/drafts?... or /blog/drafts/...
+            // Avoid matching /blog/drafts-something or /blog/draftsomething.
+            return /^\/blog\/drafts(\/|\?|$)/.test(route);
+        } catch (e) { return false; }
+    }
+
     // Build a dated URL slug: "2026-05-13-my-post-title".
     function datedSlugFor(post) {
         var attr    = (post && post.attributes) || {};
@@ -328,12 +341,18 @@
 
     function fetchPosts(opts) {
         var params = {
-            sort:    '-publishedAt',
+            sort:    opts.draftsOnly ? '-createdAt' : '-publishedAt',
             page:    { offset: opts.offset || 0, limit: opts.limit || 12 },
             include: 'user,category',
         };
         if (opts.categoryId) {
             params.categoryId = opts.categoryId;
+        }
+        if (opts.draftsOnly) {
+            params.isPublished = 'false';
+        }
+        if (opts.userId) {
+            params.userId = opts.userId;
         }
         return app.request({
             method: 'GET',
@@ -347,6 +366,126 @@
             method: 'GET',
             url:    app.forum.attribute('apiUrl') + '/linkrobins-blog-posts/' + encodeURIComponent(slug),
             params: { include: 'user,category' },
+        });
+    }
+
+    function slugify(s) {
+        return String(s || '')
+            .toLowerCase()
+            .replace(/['"`]/g, '')
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 200);
+    }
+
+    function insertAtCursor(textarea, before, after, placeholder) {
+        if (!textarea) return;
+        var start = textarea.selectionStart;
+        var end   = textarea.selectionEnd;
+        var value = textarea.value;
+        var selected = value.slice(start, end) || (placeholder || '');
+        var newValue = value.slice(0, start) + before + selected + after + value.slice(end);
+        textarea.value = newValue;
+        try {
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        } catch (e) {}
+        var cursorStart = start + before.length;
+        var cursorEnd   = cursorStart + selected.length;
+        try {
+            textarea.focus();
+            textarea.setSelectionRange(cursorStart, cursorEnd);
+        } catch (e) {}
+    }
+
+    function isFofUploadInstalled() {
+        try {
+            if (typeof flarum !== 'undefined' && flarum.extensions && flarum.extensions['fof-upload']) {
+                return true;
+            }
+        } catch (e) {}
+        try {
+            if (app && app.data && app.data.extensions && app.data.extensions['fof-upload']) {
+                return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
+    function uploadFofFile(file, cb) {
+        if (!file) { cb(null, 'No file.'); return; }
+        var body = new FormData();
+        body.append('files[]', file);
+        app.request({
+            method:    'POST',
+            url:       app.forum.attribute('apiUrl') + '/fof/upload',
+            serialize: function (raw) { return raw; },
+            body:      body,
+        })
+        .then(function (resp) {
+            var data = resp && resp.data;
+            var uploaded = (data && data[0]) || null;
+            var url = uploaded && uploaded.attributes && uploaded.attributes.url;
+            if (url) cb(url, null);
+            else cb(null, 'Upload succeeded but no URL returned.');
+        })
+        .catch(function (err) {
+            console.error('[linkrobins/blog] upload failed:', err);
+            var msg = 'Upload failed.';
+            if (err && err.response && err.response.errors && err.response.errors[0]) {
+                var e = err.response.errors[0];
+                msg = e.detail || e.title || msg;
+            } else if (err && err.status === 404) {
+                msg = 'Upload endpoint not found. Is fof/upload installed and enabled?';
+            }
+            cb(null, msg);
+        });
+    }
+
+    function fetchCategoriesList() {
+        return app.request({
+            method: 'GET',
+            url:    app.forum.attribute('apiUrl') + '/linkrobins-blog-categories',
+            params: { sort: 'position', page: { limit: 100 } },
+        });
+    }
+
+    function createBlogPost(attributes, categoryId) {
+        var rels = {};
+        if (categoryId) {
+            rels.category = { data: { type: 'linkrobins-blog-categories', id: String(categoryId) } };
+        }
+        return app.request({
+            method: 'POST',
+            url:    app.forum.attribute('apiUrl') + '/linkrobins-blog-posts',
+            body:   {
+                data: {
+                    type: 'linkrobins-blog-posts',
+                    attributes: attributes,
+                    relationships: rels,
+                },
+            },
+        });
+    }
+
+    function updateBlogPost(id, attributes, categoryId, clearCategory) {
+        var rels = {};
+        if (categoryId) {
+            rels.category = { data: { type: 'linkrobins-blog-categories', id: String(categoryId) } };
+        } else if (clearCategory) {
+            rels.category = { data: null };
+        }
+        var body = {
+            data: {
+                type: 'linkrobins-blog-posts',
+                id:   String(id),
+                attributes: attributes,
+            },
+        };
+        if (Object.keys(rels).length) body.data.relationships = rels;
+        return app.request({
+            method: 'PATCH',
+            url:    app.forum.attribute('apiUrl') + '/linkrobins-blog-posts/' + encodeURIComponent(id),
+            body:   body,
         });
     }
 
@@ -376,6 +515,163 @@
         } catch (e) {}
     }
 
+    function canCreateBlogPost() {
+        try {
+            if (!app.session || !app.session.user) return false;
+            if (typeof app.session.user.isAdmin === 'function' && app.session.user.isAdmin()) return true;
+            return !!readForumAttribute('canCreateBlogPost');
+        } catch (e) { return false; }
+    }
+
+    function canModerateBlogPosts() {
+        try {
+            if (!app.session || !app.session.user) return false;
+            if (typeof app.session.user.isAdmin === 'function' && app.session.user.isAdmin()) return true;
+            return !!readForumAttribute('canModerateBlogPosts');
+        } catch (e) { return false; }
+    }
+
+    function canEditBlogPost(post) {
+        if (canModerateBlogPosts()) return true;
+        if (!canCreateBlogPost()) return false;
+        try {
+            if (!app.session || !app.session.user) return false;
+            var rel = post && post.relationships && post.relationships.user && post.relationships.user.data;
+            if (!rel) return false;
+            return String(rel.id) === String(app.session.user.id());
+        } catch (e) { return false; }
+    }
+
+    // Shared categories cache used by the post editor modal. We fetch once
+    // and reuse across opens; categories rarely change and re-fetching on
+    // every open feels sluggish.
+    var _categoriesCache = null;
+    var _categoriesLoading = false;
+    var _categoriesWaiters = [];
+
+    function loadCategoriesForEditor(cb) {
+        if (_categoriesCache) { cb(_categoriesCache); return; }
+        _categoriesWaiters.push(cb);
+        if (_categoriesLoading) return;
+        _categoriesLoading = true;
+        fetchCategoriesList()
+            .then(function (resp) {
+                _categoriesCache = (resp && resp.data) || [];
+                _categoriesLoading = false;
+                var waiters = _categoriesWaiters.slice();
+                _categoriesWaiters.length = 0;
+                waiters.forEach(function (w) { try { w(_categoriesCache); } catch (e) {} });
+            })
+            .catch(function (err) {
+                console.error('[linkrobins/blog] could not load categories:', err);
+                _categoriesLoading = false;
+                _categoriesCache = [];
+                var waiters = _categoriesWaiters.slice();
+                _categoriesWaiters.length = 0;
+                waiters.forEach(function (w) { try { w(_categoriesCache); } catch (e) {} });
+            });
+    }
+
+    function invalidateCategoriesCache() {
+        _categoriesCache = null;
+    }
+
+    // Refresh-listener registry. Each mounted blog page (index or article)
+    // registers itself on oninit and unregisters on onremove. When a post
+    // save fires onSaved, we broadcast to every current listener -- which
+    // re-runs its own _load() to repopulate state from the API.
+    //
+    // This is preferable to having the modal try to reach back into "the
+    // current page", because the current page might be an index, a
+    // category index, or an article -- and each one knows best how to
+    // refresh itself.
+    var _refreshListeners = [];
+
+    function registerBlogRefreshListener(fn) {
+        if (typeof fn !== 'function') return function () {};
+        _refreshListeners.push(fn);
+        return function unregister() {
+            var i = _refreshListeners.indexOf(fn);
+            if (i >= 0) _refreshListeners.splice(i, 1);
+        };
+    }
+
+    // Wraps Flarum's alert manager in a way that's safe to call from any
+    // delete/save handler. Auto-dismisses after a short delay so the user
+    // doesn't have to click through.
+    function showBlogAlert(type, message) {
+        try {
+            if (!app.alerts || typeof app.alerts.show !== 'function') return;
+            var key = app.alerts.show({ type: type }, message);
+            setTimeout(function () {
+                try { app.alerts.dismiss(key); } catch (e) {}
+            }, 4000);
+        } catch (e) {}
+    }
+
+    function broadcastBlogRefresh(event) {
+        // `event` is { type: 'save' | 'delete', postId?: string|number }.
+        // Listeners can inspect it to behave differently for deletes
+        // (e.g. an article page on the deleted post doesn't try to refetch
+        // a 404'd resource).
+        var ev = event || { type: 'save' };
+
+        // Slice so listeners that unregister themselves during the call
+        // (e.g. an article page navigating away on its own post deletion)
+        // don't corrupt iteration.
+        var current = _refreshListeners.slice();
+        for (var i = 0; i < current.length; i++) {
+            try { current[i](ev); } catch (e) {
+                console.error('[linkrobins/blog] refresh listener failed:', e);
+            }
+        }
+        try { m.redraw(); } catch (e) {}
+
+        // User-facing confirmation. We toast at the broadcast site rather
+        // than from each listener so the message fires regardless of which
+        // blog view is mounted (or none -- e.g. deletion of a post while
+        // on /some-other-page).
+        if (ev.type === 'delete') {
+            showBlogAlert('success', 'Post deleted.');
+        } else if (ev.type === 'save') {
+            // Saves are usually followed by the modal closing on a
+            // visible blog list/article -- no toast needed, the UI
+            // changes are their own feedback.
+        }
+    }
+
+    // Opens the post editor modal. `post` is the raw JSON:API resource
+    // (or null for a new post). `onSaved` is a callback that fires after
+    // save or delete -- pages typically use this to refresh their data.
+    function openPostEditor(post, onSaved) {
+        if (!window.LinkRobinsBlogPostEditorModal) {
+            try { alert('Post editor is not available.'); } catch (e) {}
+            return;
+        }
+        loadCategoriesForEditor(function (categories) {
+            try {
+                app.modal.show(window.LinkRobinsBlogPostEditorModal, {
+                    post:       post,
+                    categories: categories,
+                    onSaved:    function () {
+                        broadcastBlogRefresh({ type: 'save' });
+                        if (typeof onSaved === 'function') {
+                            try { onSaved(); } catch (e) {}
+                        }
+                    },
+                    onDeleted:  function (postId) {
+                        broadcastBlogRefresh({ type: 'delete', postId: postId });
+                        if (typeof onSaved === 'function') {
+                            try { onSaved(); } catch (e) {}
+                        }
+                    },
+                });
+            } catch (err) {
+                console.error('[linkrobins/blog] could not open editor:', err);
+            }
+        });
+    }
+
     function init() {
         var Page         = null;
         var LinkButton   = null;
@@ -383,17 +679,26 @@
         var LoadingIndicator = null;
         var PageStructure = null;
         var IndexSidebar  = null;
+        var Modal         = null;
         try { Page             = flarum.reg.get('core', 'common/components/Page'); }             catch (e) {}
         try { LinkButton       = flarum.reg.get('core', 'common/components/LinkButton'); }       catch (e) {}
         try { Button           = flarum.reg.get('core', 'common/components/Button'); }           catch (e) {}
         try { LoadingIndicator = flarum.reg.get('core', 'common/components/LoadingIndicator'); } catch (e) {}
         try { PageStructure    = flarum.reg.get('core', 'forum/components/PageStructure'); }     catch (e) {}
         try { IndexSidebar     = flarum.reg.get('core', 'forum/components/IndexSidebar'); }      catch (e) {}
+        try { Modal            = flarum.reg.get('core', 'common/components/Modal'); }            catch (e) {}
 
         if (!Page) {
             console.error('[linkrobins/blog] Page component not available; aborting.');
             return;
         }
+
+        // The post editor modal is built on Flarum's Modal class so it lives
+        // inside init() rather than at module scope. Stash it on a closure
+        // variable that the sidebar/article code reaches into via the
+        // openPostEditor() helper below.
+        var PostEditorModal = Modal ? makePostEditorModal(Modal) : null;
+        window.LinkRobinsBlogPostEditorModal = PostEditorModal;
 
         var BlogIndexSidebar = IndexSidebar ? makeBlogIndexSidebar(IndexSidebar, LinkButton, Button) : null;
         var BlogIndexPage    = makeBlogIndexPage(Page, LoadingIndicator, PageStructure, LinkButton, BlogIndexSidebar);
@@ -401,6 +706,14 @@
 
         app.routes['linkrobins-blog.index']    = { path: '/' + BLOG_SLUG,                          component: BlogIndexPage };
         app.routes['linkrobins-blog.category'] = { path: '/category/:slug',                       component: BlogIndexPage };
+        app.routes['linkrobins-blog.drafts']   = {
+            path: '/' + BLOG_SLUG + '/drafts',
+            component: BlogIndexPage,
+            // Mithril doesn't accept extra static attrs on route entries
+            // directly, so we read app.route.param() or detect the
+            // pathname inside the page. The page sniffs window.location
+            // to know when it's the drafts route.
+        };
         app.routes['linkrobins-blog.post']     = { path: '/' + ARTICLE_SLUG + '/:slug',            component: BlogPostPage  };
 
         // Note: blog-comment discussions are now ordinary, visible Flarum
@@ -431,6 +744,560 @@
         }
     }
 
+    function makePostEditorModal(Modal) {
+        return class PostEditorModal extends Modal {
+            static get isDismissibleViaBackdropClick() { return false; }
+
+            oninit(vnode) {
+                super.oninit(vnode);
+
+                var post = this.attrs.post;
+                var attr = post ? post.attributes : {};
+                var cat  = post ? (post.relationships
+                    && post.relationships.category
+                    && post.relationships.category.data) : null;
+
+                this.editId      = post ? post.id : null;
+                this.titleText   = attr.title       || '';
+                this.slug        = attr.slug        || '';
+                this.excerpt     = attr.excerpt     || '';
+                this.cover       = attr.coverImageUrl || '';
+                this.coverCredit = attr.coverImageCredit || '';
+                this.bodyText    = attr.content     || '';
+                this.visibility  = attr.visibility  || 'public';
+                this.categoryId  = cat ? cat.id : '';
+                this.isPublished = attr.isPublished === true;
+                // commentsEnabled defaults to true for new posts and for existing posts where the field isn't set
+                this.commentsEnabled = post ? (attr.commentsEnabled !== false) : true;
+                this.saving      = false;
+                this.error       = null;
+                this.coverUploading   = false;
+                this.coverUploadError = null;
+                this.bodyUploading   = false;
+                this.bodyUploadIndex = 0;
+                this.bodyUploadTotal = 0;
+                this.bodyUploadError = null;
+                this._userEditedSlug = !!post;
+            }
+
+            className()  { return 'Modal--large LinkRobinsBlog-editorModal'; }
+            title()      { return this.editId ? 'Edit post' : 'New post'; }
+
+            content() {
+                var self = this;
+                return m('div', { className: 'Modal-body LinkRobinsBlog-editor' }, [
+                    self.error ? m('div', { className: 'Alert Alert--danger' }, [
+                        m('span', { className: 'Alert-body' }, 'Could not save: ' + self._errorMessage()),
+                    ]) : null,
+                    m('div', { className: 'Form-body' }, [
+                        self._renderTitleAndSlug(),
+                        self._renderExcerpt(),
+                        self._renderCover(),
+                        self._renderMeta(),
+                        m('div', { className: 'LinkRobinsBlog-editor-bodyWrapper' }, [
+                            self._renderToolbar(),
+                            self._renderBody(),
+                        ]),
+                    ]),
+                    self._renderActions(),
+                ]);
+            }
+
+            _errorMessage() {
+                var err = this.error;
+                if (!err) return 'unknown error';
+                try {
+                    var errors = err.response && err.response.errors;
+                    if (errors && errors[0]) {
+                        var src = errors[0].source && (errors[0].source.pointer || errors[0].source.parameter);
+                        return (errors[0].detail || errors[0].title || 'error') + (src ? ' (' + src + ')' : '');
+                    }
+                } catch (e) {}
+                return (err.message || err.statusText || 'unknown error');
+            }
+
+            _renderTitleAndSlug() {
+                var self = this;
+                return m('div', { className: 'Form-group' }, [
+                    m('label', null, 'Title'),
+                    m('input', {
+                        type:       'text',
+                        className:  'FormControl',
+                        value:      self.titleText,
+                        disabled:   self.saving,
+                        placeholder: 'e.g. Why I built this',
+                        oninput:    function (e) {
+                            self.titleText = e.target.value;
+                            if (!self.editId) {
+                                self.slug = slugify(self.titleText);
+                            }
+                        },
+                    }),
+                ]);
+            }
+
+            _renderExcerpt() {
+                var self = this;
+                return m('div', { className: 'Form-group' }, [
+                    m('label', null, 'Excerpt ', m('span', { className: 'LinkRobinsBlog-editor-optional' }, '(optional)')),
+                    m('textarea', {
+                        className:  'FormControl',
+                        value:      self.excerpt,
+                        disabled:   self.saving,
+                        rows:       2,
+                        placeholder: 'Optional summary for cards. If empty, the first paragraph of the body is used.',
+                        oninput:    function (e) { self.excerpt = e.target.value; },
+                    }),
+                ]);
+            }
+
+            _renderCover() {
+                var self = this;
+                var hasFofUpload = isFofUploadInstalled();
+                return m('div', { className: 'Form-group LinkRobinsBlog-editor-coverGroup' }, [
+                    m('label', null, 'Cover image'),
+                    m('div', { className: 'LinkRobinsBlog-editor-coverInputRow' }, [
+                        m('input', {
+                            type:        'text',
+                            className:   'FormControl',
+                            value:       self.cover,
+                            disabled:    self.saving || self.coverUploading,
+                            placeholder: 'https://example.com/image.jpg',
+                            oninput:     function (e) { self.cover = e.target.value; },
+                        }),
+                        hasFofUpload ? m('button', {
+                            type:      'button',
+                            className: 'Button LinkRobinsBlog-editor-coverUploadBtn',
+                            disabled:  self.saving || self.coverUploading,
+                            onclick:   function () { self._pickCoverFile(); },
+                        }, [
+                            self.coverUploading
+                                ? m('i', { className: 'fas fa-spinner fa-spin LinkRobinsBlog-editor-coverUploadIcon' })
+                                : m('i', { className: 'fas fa-upload LinkRobinsBlog-editor-coverUploadIcon' }),
+                            ' ',
+                            self.coverUploading ? 'Uploading…' : 'Upload',
+                        ]) : null,
+                        // Hidden file input the Upload button triggers.
+                        hasFofUpload ? m('input', {
+                            type:     'file',
+                            accept:   'image/*',
+                            style:    'display: none;',
+                            oncreate: function (vnode) { self._coverFileInput = vnode.dom; },
+                            onchange: function (e) {
+                                var f = e.target && e.target.files && e.target.files[0];
+                                if (f) self._uploadCover(f);
+                                if (e.target) e.target.value = '';
+                            },
+                        }) : null,
+                    ]),
+                    !hasFofUpload ? m('div', { className: 'helpText' },
+                        'Paste a URL above. Install fof/upload to get a direct upload button.'
+                    ) : null,
+                    self.coverUploadError ? m('div', { className: 'Alert Alert--danger', style: 'margin-top:8px' },
+                        m('span', { className: 'Alert-body' }, self.coverUploadError)
+                    ) : null,
+                    self.cover ? m('div', { className: 'LinkRobinsBlog-editor-coverPreview' },
+                        m('img', { src: self.cover, alt: '', onerror: function (e) { e.target.style.display = 'none'; } })
+                    ) : null,
+                    m('div', { className: 'Form-group LinkRobinsBlog-editor-coverCreditGroup' }, [
+                        m('label', null, 'Image credit (optional)'),
+                        m('textarea', {
+                            className:   'FormControl',
+                            rows:        2,
+                            value:       self.coverCredit || '',
+                            disabled:    self.saving,
+                            placeholder: 'Photo by Jane Doe on Unsplash',
+                            oninput:     function (e) { self.coverCredit = e.target.value; },
+                        }),
+                        m('div', { className: 'helpText' },
+                            'Shown as a small caption under the cover image.'
+                        ),
+                    ]),
+                ]);
+            }
+
+            _pickCoverFile() {
+                if (this._coverFileInput) this._coverFileInput.click();
+            }
+
+            _uploadCover(file) {
+                var self = this;
+                if (!file) return;
+                self.coverUploading   = true;
+                self.coverUploadError = null;
+                m.redraw();
+
+                var body = new FormData();
+                body.append('files[]', file);
+
+                app.request({
+                    method:    'POST',
+                    url:       app.forum.attribute('apiUrl') + '/fof/upload',
+                    serialize: function (raw) { return raw; },
+                    body:      body,
+                })
+                .then(function (resp) {
+                    self.coverUploading = false;
+                    var data = resp && resp.data;
+                    var uploaded = (data && data[0]) || null;
+                    var url = uploaded && uploaded.attributes && uploaded.attributes.url;
+                    if (url) {
+                        self.cover = url;
+                    } else {
+                        self.coverUploadError = 'Upload succeeded but no URL was returned.';
+                    }
+                    m.redraw();
+                })
+                .catch(function (err) {
+                    self.coverUploading = false;
+                    console.error('[linkrobins/blog] cover upload failed:', err);
+                    var msg = 'Upload failed.';
+                    if (err && err.response && err.response.errors && err.response.errors[0]) {
+                        var e = err.response.errors[0];
+                        msg = (e.detail || e.title || msg);
+                    } else if (err && err.status === 404) {
+                        msg = 'Upload endpoint not found. Is the fof/upload extension installed and enabled?';
+                    }
+                    self.coverUploadError = msg;
+                    m.redraw();
+                });
+            }
+
+            _renderMeta() {
+                var self = this;
+                return m('div', { className: 'LinkRobinsBlog-editor-row' }, [
+                    m('div', { className: 'Form-group' }, [
+                        m('label', null, 'Category'),
+                        m('select', {
+                            className: 'FormControl',
+                            value:     self.categoryId,
+                            disabled:  self.saving,
+                            onchange:  function (e) { self.categoryId = e.target.value; },
+                        }, [
+                            m('option', { value: '' }, '— Uncategorized —'),
+                            (self.attrs.categories || []).map(function (cat) {
+                                return m('option', { value: cat.id, key: 'c-' + cat.id }, cat.attributes.name);
+                            }),
+                        ]),
+                    ]),
+                    m('div', { className: 'Form-group' }, [
+                        m('label', null, 'Visibility'),
+                        m('select', {
+                            className: 'FormControl',
+                            value:     self.visibility,
+                            disabled:  self.saving,
+                            onchange:  function (e) { self.visibility = e.target.value; },
+                        }, [
+                            m('option', { value: 'public' }, 'Public — anyone can read'),
+                            m('option', { value: 'members' }, 'Members only — login required'),
+                        ]),
+                    ]),
+                    m('div', { className: 'Form-group LinkRobinsBlog-editor-commentsToggle' }, [
+                        m('label', null, 'Comments'),
+                        m('label', { className: 'LinkRobinsBlog-editor-commentsToggle-row' }, [
+                            m('input', {
+                                type:     'checkbox',
+                                checked:  self.commentsEnabled !== false,
+                                disabled: self.saving,
+                                onchange: function (e) { self.commentsEnabled = !!e.target.checked; },
+                            }),
+                            m('span', null, ' Allow comments on this post'),
+                        ]),
+                    ]),
+                ]);
+            }
+
+            _renderToolbar() {
+                var self = this;
+                var btns = [
+                    { icon: 'fas fa-bold',           title: 'Bold',         apply: function (ta) { insertAtCursor(ta, '**', '**', 'bold text'); } },
+                    { icon: 'fas fa-italic',         title: 'Italic',       apply: function (ta) { insertAtCursor(ta, '*',  '*',  'italic text'); } },
+                    { icon: 'fas fa-heading',        title: 'Heading',      apply: function (ta) { insertAtCursor(ta, '\n## ', '', 'Heading'); } },
+                    { icon: 'fas fa-link',           title: 'Link',         apply: function (ta) {
+                        var url = '';
+                        try { url = window.prompt('URL:', 'https://') || ''; } catch (e) {}
+                        if (!url) return;
+                        insertAtCursor(ta, '[', '](' + url + ')', 'link text');
+                    } },
+                    { icon: 'fas fa-image',          title: 'Image (URL)',  apply: function (ta) {
+                        var url = '';
+                        try { url = window.prompt('Image URL:', 'https://') || ''; } catch (e) {}
+                        if (!url) return;
+                        insertAtCursor(ta, '![', '](' + url + ')', 'alt text');
+                    } },
+                    { icon: 'fas fa-code',           title: 'Inline code',  apply: function (ta) { insertAtCursor(ta, '`',  '`', 'code'); } },
+                    { icon: 'fas fa-file-code',      title: 'Code block',   apply: function (ta) { insertAtCursor(ta, '\n```\n', '\n```\n', 'code here'); } },
+                    { icon: 'fas fa-eye-slash',      title: 'Spoiler',      apply: function (ta) { insertAtCursor(ta, '[spoiler]', '[/spoiler]', 'hidden text'); } },
+                    { icon: 'fas fa-table',          title: 'Table',        apply: function (ta) {
+                        insertAtCursor(ta, '\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n', '', '');
+                    } },
+                    { icon: 'fas fa-quote-right',    title: 'Quote',        apply: function (ta) { insertAtCursor(ta, '\n> ', '', 'quoted text'); } },
+                    { icon: 'fas fa-list-ul',        title: 'Bulleted list',apply: function (ta) { insertAtCursor(ta, '\n- ', '',  'item'); } },
+                    { icon: 'fas fa-list-ol',        title: 'Numbered list',apply: function (ta) { insertAtCursor(ta, '\n1. ', '', 'item'); } },
+                ];
+
+                var children = btns.map(function (b) {
+                    return m('button', {
+                        type:      'button',
+                        className: 'LinkRobinsBlog-editor-toolbarBtn',
+                        title:     b.title,
+                        disabled:  self.saving,
+                        onclick:   function () {
+                            var ta = document.getElementById('LinkRobinsBlog-editor-body');
+                            b.apply(ta);
+                        },
+                    }, m('i', { className: b.icon }));
+                });
+
+                if (isFofUploadInstalled()) {
+                    children.push(m('span', { className: 'LinkRobinsBlog-editor-toolbarSep' }));
+                    children.push(m('button', {
+                        type:      'button',
+                        className: 'LinkRobinsBlog-editor-toolbarBtn LinkRobinsBlog-editor-toolbarBtn--upload',
+                        title:     'Upload image(s)',
+                        disabled:  self.saving || self.bodyUploading,
+                        onclick:   function () { self._pickBodyFiles(); },
+                    }, [
+                        self.bodyUploading
+                            ? m('i', { className: 'fas fa-spinner fa-spin' })
+                            : m('i', { className: 'fas fa-cloud-upload-alt' }),
+                    ]));
+                }
+
+                return m('div', { className: 'LinkRobinsBlog-editor-toolbar' }, children);
+            }
+
+            _renderBody() {
+                var self = this;
+                var hasFofUpload = isFofUploadInstalled();
+                return m('div', { className: 'LinkRobinsBlog-editor-bodyGroup' }, [
+                    m('textarea', {
+                        id:         'LinkRobinsBlog-editor-body',
+                        className:  'FormControl LinkRobinsBlog-editor-bodyInput',
+                        value:      self.bodyText,
+                        disabled:   self.saving,
+                        rows:       16,
+                        placeholder: 'Write in markdown. **bold**, *italic*, [links](https://...), and so on.',
+                        oninput:    function (e) { self.bodyText = e.target.value; },
+                    }),
+                    hasFofUpload ? m('input', {
+                        type:     'file',
+                        accept:   'image/*',
+                        multiple: true,
+                        style:    'display: none;',
+                        oncreate: function (vnode) { self._bodyFileInput = vnode.dom; },
+                        onchange: function (e) {
+                            var files = e.target && e.target.files;
+                            if (files && files.length) self._uploadBodyFiles(files);
+                            if (e.target) e.target.value = '';
+                        },
+                    }) : null,
+                    self.bodyUploading ? m('div', { className: 'LinkRobinsBlog-editor-bodyUploadStatus' }, [
+                        m('i', { className: 'fas fa-spinner fa-spin' }),
+                        ' Uploading ' + (self.bodyUploadIndex || 0) + ' of ' + (self.bodyUploadTotal || 0) + '…',
+                    ]) : null,
+                    self.bodyUploadError ? m('div', { className: 'Alert Alert--danger LinkRobinsBlog-editor-bodyUploadError' },
+                        m('span', { className: 'Alert-body' }, self.bodyUploadError)
+                    ) : null,
+                ]);
+            }
+
+            _pickBodyFiles() {
+                if (this._bodyFileInput) this._bodyFileInput.click();
+            }
+
+            _uploadBodyFiles(files) {
+                var self = this;
+                var list = Array.prototype.slice.call(files);
+                if (!list.length) return;
+
+                self.bodyUploading   = true;
+                self.bodyUploadTotal = list.length;
+                self.bodyUploadIndex = 0;
+                self.bodyUploadError = null;
+                m.redraw();
+
+                var processNext = function (i) {
+                    if (i >= list.length) {
+                        self.bodyUploading   = false;
+                        self.bodyUploadIndex = 0;
+                        self.bodyUploadTotal = 0;
+                        m.redraw();
+                        return;
+                    }
+                    self.bodyUploadIndex = i + 1;
+                    m.redraw();
+
+                    var file = list[i];
+                    var body = new FormData();
+                    body.append('files[]', file);
+
+                    app.request({
+                        method:    'POST',
+                        url:       app.forum.attribute('apiUrl') + '/fof/upload',
+                        serialize: function (raw) { return raw; },
+                        body:      body,
+                    })
+                    .then(function (resp) {
+                        var data = resp && resp.data;
+                        var uploaded = (data && data[0]) || null;
+                        var url = uploaded && uploaded.attributes && uploaded.attributes.url;
+                        var name = (uploaded && uploaded.attributes && (uploaded.attributes.baseName || uploaded.attributes.path)) || (file.name || 'image');
+                        if (url) {
+                            // Insert markdown image at end of body (newline-separated).
+                            var ta = document.getElementById('LinkRobinsBlog-editor-body');
+                            var snippet = '![' + name.replace(/[\[\]]/g, '') + '](' + url + ')';
+                            if (ta && typeof ta.selectionStart === 'number') {
+                                // Insert at cursor on first iteration; subsequent ones append after the inserted text.
+                                var insertText = (ta.value && !/\n\n$/.test(ta.value) && ta.selectionStart === ta.value.length ? '\n\n' : '') + snippet + '\n\n';
+                                var start = ta.selectionStart, end = ta.selectionEnd;
+                                ta.value = ta.value.slice(0, start) + insertText + ta.value.slice(end);
+                                var pos = start + insertText.length;
+                                ta.selectionStart = ta.selectionEnd = pos;
+                                self.bodyText = ta.value;
+                            } else {
+                                var sep = (self.bodyText && !/\n\n$/.test(self.bodyText)) ? '\n\n' : '';
+                                self.bodyText = (self.bodyText || '') + sep + snippet + '\n\n';
+                            }
+                        }
+                        processNext(i + 1);
+                    })
+                    .catch(function (err) {
+                        console.error('[linkrobins/blog] body upload failed:', err);
+                        var msg = 'Upload failed.';
+                        if (err && err.response && err.response.errors && err.response.errors[0]) {
+                            var e = err.response.errors[0];
+                            msg = e.detail || e.title || msg;
+                        } else if (err && err.status === 404) {
+                            msg = 'Upload endpoint not found. Is the fof/upload extension installed and enabled?';
+                        }
+                        self.bodyUploading   = false;
+                        self.bodyUploadError = msg + ' (' + (file.name || 'file') + ')';
+                        self.bodyUploadIndex = 0;
+                        self.bodyUploadTotal = 0;
+                        m.redraw();
+                    });
+                };
+
+                processNext(0);
+            }
+
+            _renderActions() {
+                var self = this;
+                var hasTitle = (self.titleText || '').trim() !== '';
+                var hasBody  = (self.bodyText  || '').trim() !== '';
+                var canSave  = hasTitle && hasBody && !self.saving;
+
+                var children = [
+                    m('div', { className: 'LinkRobinsBlog-editor-actions-primary' }, [
+                        m('button', {
+                            type:      'button',
+                            className: 'Button Button--primary',
+                            disabled:  !canSave,
+                            onclick:   function () { self._save(true); },
+                        }, self.saving
+                            ? 'Saving…'
+                            : (self.editId
+                                ? (self.isPublished ? 'Update' : 'Publish')
+                                : 'Publish')),
+                        m('button', {
+                            type:      'button',
+                            className: 'Button',
+                            disabled:  !canSave,
+                            onclick:   function () { self._save(false); },
+                        }, self.saving ? 'Saving…' : 'Save as draft'),
+                        m('button', {
+                            type:      'button',
+                            className: 'Button Button--text',
+                            disabled:  self.saving,
+                            onclick:   function () { self.hide(); },
+                        }, 'Cancel'),
+                    ]),
+                ];
+
+                if (self.editId) {
+                    children.push(
+                        m('button', {
+                            type:      'button',
+                            className: 'Button Button--text LinkRobinsBlog-editor-deleteBtn',
+                            disabled:  self.saving,
+                            onclick:   function () {
+                                if (!window.confirm('Delete this post? This cannot be undone.')) return;
+                                self.saving = true;
+                                self.error  = null;
+                                m.redraw();
+                                deleteBlogPost(self.editId).then(function () {
+                                    // Prefer onDeleted (specifically signals
+                                    // the post is gone); fall back to
+                                    // onSaved for callers that don't
+                                    // differentiate.
+                                    var deletedCb = self.attrs && self.attrs.onDeleted;
+                                    var savedCb   = self.attrs && self.attrs.onSaved;
+                                    if (typeof deletedCb === 'function') {
+                                        try { deletedCb(self.editId); } catch (e) {}
+                                    } else if (typeof savedCb === 'function') {
+                                        try { savedCb(); } catch (e) {}
+                                    }
+                                    self.hide();
+                                }).catch(function (err) {
+                                    self.saving = false;
+                                    self.error  = err;
+                                    m.redraw();
+                                });
+                            },
+                        }, 'Delete Post')
+                    );
+                }
+
+                return m('div', { className: 'LinkRobinsBlog-editor-actions' }, children);
+            }
+
+            _save(publishFlag) {
+                var self = this;
+                self.saving = true;
+                self.error  = null;
+                m.redraw();
+
+                var attributes = {
+                    title:            self.titleText.trim(),
+                    slug:             self.slug.trim() || slugify(self.titleText),
+                    excerpt:          self.excerpt || '',
+                    content:          self.bodyText,
+                    coverImageUrl:    self.cover || null,
+                    coverImageCredit: (self.coverCredit && self.coverCredit.trim()) || null,
+                    visibility:       self.visibility,
+                    isPublished:      publishFlag,
+                    commentsEnabled:  self.commentsEnabled !== false,
+                };
+                if (publishFlag && !self.editId) {
+                    attributes.publishedAt = new Date().toISOString();
+                } else if (publishFlag && self.editId && !self.isPublished) {
+                    attributes.publishedAt = new Date().toISOString();
+                }
+
+                var categoryId    = self.categoryId || null;
+                var clearCategory = !categoryId;
+
+                var promise = self.editId
+                    ? updateBlogPost(self.editId, attributes, categoryId, clearCategory)
+                    : createBlogPost(attributes, categoryId);
+
+                promise
+                    .then(function () {
+                        self.saving = false;
+                        if (typeof self.attrs.onSaved === 'function') self.attrs.onSaved();
+                        self.hide();
+                    })
+                    .catch(function (err) {
+                        self.saving = false;
+                        self.error  = err;
+                        console.error('[linkrobins/blog] save failed:', err);
+                        m.redraw();
+                    });
+            }
+        };
+    }
+
     function makeBlogIndexSidebar(IndexSidebar, LinkButton, Button) {
         return class BlogIndexSidebar extends IndexSidebar {
             // The whole sidebar: a "Subscribe" primary button, the SelectDropdown nav,
@@ -444,11 +1311,34 @@
                 var items = ItemListCtor ? new ItemListCtor() : null;
                 if (!items || !SelectDropdown) return items;
 
-                // Newsletter subscribe button. Three states: guest (outline
-                // star, click -> login), unsubscribed (outline star, click
-                // -> POST), subscribed (filled star, click -> confirm +
-                // DELETE). The icon change communicates state on mobile
-                // where the label collapses to icon-only.
+                // Compose button. Visible only to users who can author blog
+                // posts (per linkrobins-blog.start permission, plus admins).
+                // Sits beside Subscribe with higher priority so it renders
+                // first.
+                if (Button && canCreateBlogPost()) {
+                    items.add(
+                        'compose',
+                        m(Button, {
+                            icon:          'fas fa-pen',
+                            className:     'Button Button--primary LinkRobinsBlog-composeButton',
+                            itemClassName: 'App-primaryControl',
+                            'aria-label':  'New post',
+                            title:         'New post',
+                            onclick:       function () {
+                                openPostEditor(null, function () {
+                                    // broadcastBlogRefresh already redraws;
+                                    // invalidate the category cache in case
+                                    // the user touched categories during
+                                    // composition.
+                                    invalidateCategoriesCache();
+                                });
+                            },
+                        }, 'Compose'),
+                        110
+                    );
+                }
+
+                // Newsletter subscribe button.
                 if (Button) {
                     _newsletterInitState();
                     var loggedIn = !!(app.session && app.session.user);
@@ -484,8 +1374,8 @@
                         'subscribe',
                         m(Button, {
                             icon:          icon,
-                            className:     'Button Button--primary LinkRobinsBlog-subscribeButton' + extraClass,
-                            itemClassName: 'App-primaryControl',
+                            className:     'Button LinkRobinsBlog-subscribeButton' + extraClass,
+                            itemClassName: 'LinkRobinsBlog-subscribeButton-item',
                             disabled:      busy,
                             'aria-label':  label,
                             title:         label,
@@ -528,7 +1418,8 @@
                 var allHref    = blogHome ? (bp + '/') : (bp + blogIndexRoute());
                 var activeSlug = (this.attrs && this.attrs.activeCategorySlug) || null;
                 var isPostView = !!(this.attrs && this.attrs.isPostPage);
-                var allActive  = !activeSlug && !isPostView;
+                var onDrafts   = isDraftsRoute();
+                var allActive  = !activeSlug && !isPostView && !onDrafts;
 
                 items.add(
                     'allPosts',
@@ -539,6 +1430,23 @@
                     }, navLabel() || 'All posts'),
                     100
                 );
+
+                // Drafts link, visible only to users who can author posts.
+                // Active when on /blog/drafts; not active on the main index.
+                if (canCreateBlogPost()) {
+                    var draftsHref   = bp + '/' + BLOG_SLUG + '/drafts';
+                    var draftsActive = isDraftsRoute();
+                    items.add(
+                        'drafts',
+                        m(LinkButton, {
+                            href:   draftsHref,
+                            icon:   'fas fa-file-alt',
+                            active: draftsActive,
+                            title:  'Posts you have saved as drafts',
+                        }, 'Drafts'),
+                        95
+                    );
+                }
 
                 // Forum link sits right under the blog link.
                 var forumHref = blogHome ? (bp + '/all') : (bp + '/');
@@ -599,28 +1507,45 @@
                 this.hasMore     = true;
                 this.category    = null;
                 this.error       = null;
+                this.mode        = isDraftsRoute() ? 'drafts' : 'index';
 
                 try {
-                    app.setTitle('');
+                    app.setTitle(this.mode === 'drafts' ? 'Drafts' : '');
                     app.setTitleCount(0);
                 } catch (e) {}
 
                 this._currentSlug = this.attrs && this.attrs.slug || null;
                 this._load();
                 loadAllCategories().then(function () { try { m.redraw(); } catch (e) {} });
+
+                var self = this;
+                this._refreshUnregister = registerBlogRefreshListener(function (ev) {
+                    // Save and delete both warrant a refetch of the index.
+                    // We ignore ev.type here -- whichever happened, the
+                    // list is now stale.
+                    self.loading  = true;
+                    self.posts    = [];
+                    self.included = [];
+                    self.offset   = 0;
+                    self.hasMore  = true;
+                    self._load();
+                });
             }
 
             onupdate(vnode) {
                 if (super.onupdate) super.onupdate(vnode);
                 var newSlug = this.attrs && this.attrs.slug || null;
-                if (newSlug !== this._currentSlug) {
+                var newMode = isDraftsRoute() ? 'drafts' : 'index';
+                if (newSlug !== this._currentSlug || newMode !== this.mode) {
                     this._currentSlug = newSlug;
+                    this.mode    = newMode;
                     this.loading = true;
                     this.posts   = [];
                     this.included = [];
                     this.offset  = 0;
                     this.hasMore = true;
                     this.category = null;
+                    try { app.setTitle(this.mode === 'drafts' ? 'Drafts' : ''); } catch (e) {}
                     this._load();
                 }
                 this._installScrollObserver();
@@ -635,15 +1560,22 @@
             onremove(vnode) {
                 try { applyBlogBodyClass(false); } catch (e) {}
                 try { this._teardownScrollObserver(); } catch (e) {}
+                try { if (this._refreshUnregister) this._refreshUnregister(); } catch (e) {}
                 try { if (super.onremove) super.onremove(vnode); } catch (e) {}
             }
 
             _load() {
                 var self = this;
                 var categoryId = null;
+                var draftsOnly = self.mode === 'drafts';
 
                 var run = function () {
-                    fetchPosts({ offset: 0, limit: postsPerPage(), categoryId: categoryId })
+                    fetchPosts({
+                        offset:     0,
+                        limit:      postsPerPage(),
+                        categoryId: categoryId,
+                        draftsOnly: draftsOnly,
+                    })
                         .then(function (resp) {
                             self.posts    = resp.data || [];
                             self.included = resp.included || [];
@@ -660,7 +1592,10 @@
                         });
                 };
 
-                if (this._currentSlug) {
+                // Drafts route has no category slug to resolve; skip the
+                // category lookup branch even if a stale slug somehow sat
+                // on this.attrs.
+                if (this._currentSlug && self.mode !== 'drafts') {
                     app.request({
                         method: 'GET',
                         url:    app.forum.attribute('apiUrl') + '/linkrobins-blog-categories/' + encodeURIComponent(this._currentSlug),
@@ -688,8 +1623,14 @@
                 m.redraw();
 
                 var categoryId = self.category ? self.category.id : null;
+                var draftsOnly = self.mode === 'drafts';
 
-                fetchPosts({ offset: self.offset, limit: postsPerPage(), categoryId: categoryId })
+                fetchPosts({
+                    offset:     self.offset,
+                    limit:      postsPerPage(),
+                    categoryId: categoryId,
+                    draftsOnly: draftsOnly,
+                })
                     .then(function (resp) {
                         var fresh = resp.data || [];
                         var seen  = {};
@@ -759,9 +1700,24 @@
                 if (self.loading) {
                     content = LoadingIndicator ? m(LoadingIndicator) : m('div', null, 'Loading...');
                 } else if (self.error) {
-                    content = m('div', { className: 'LinkRobinsBlog-empty' }, 'Something went wrong loading the blog.');
+                    content = m('div', { className: 'LinkRobinsBlog-empty' },
+                        self.mode === 'drafts'
+                            ? 'Something went wrong loading drafts.'
+                            : 'Something went wrong loading the blog.');
                 } else if (!self.posts.length) {
-                    content = m('div', { className: 'LinkRobinsBlog-empty' }, 'No posts here yet.');
+                    content = m('div', { className: 'LinkRobinsBlog-empty' },
+                        self.mode === 'drafts'
+                            ? 'No drafts yet. New posts you save as drafts will appear here.'
+                            : 'No posts here yet.');
+                } else if (self.mode === 'drafts') {
+                    // Drafts list: no featured treatment; render every entry
+                    // as a card so the listing reads as a uniform queue.
+                    content = [
+                        m('div', { className: 'LinkRobinsBlog-grid LinkRobinsBlog-grid--drafts' },
+                            self.posts.map(self._renderCard.bind(self))
+                        ),
+                        self._renderLoadMore(),
+                    ];
                 } else {
                     var featured = self.posts[0];
                     var rest     = self.posts.slice(1);
@@ -815,7 +1771,9 @@
             _renderHero() {
                 var tagline = this.category ? '' : siteTagline();
                 var titleNode;
-                if (this.category) {
+                if (this.mode === 'drafts') {
+                    titleNode = m('h1', { className: 'LinkRobinsBlog-hero-title' }, 'Drafts');
+                } else if (this.category) {
                     titleNode = m('h1', { className: 'LinkRobinsBlog-hero-title' }, this.category.attributes.name);
                 } else {
                     titleNode = this._renderHeroBranding();
@@ -842,7 +1800,10 @@
                     m('div', { className: 'container' },
                         m('div', { className: 'LinkRobinsBlog-hero-inner' }, [
                             titleNode,
-                            tagline ? m('p', { className: 'LinkRobinsBlog-hero-tagline' }, tagline) : null,
+                            this.mode === 'drafts'
+                                ? m('p', { className: 'LinkRobinsBlog-hero-tagline' },
+                                    'Unpublished posts you can edit or publish from here.')
+                                : (tagline ? m('p', { className: 'LinkRobinsBlog-hero-tagline' }, tagline) : null),
                             this.category && this.category.attributes.description
                                 ? m('p', { className: 'LinkRobinsBlog-hero-tagline' }, this.category.attributes.description)
                                 : null,
@@ -924,10 +1885,11 @@
                 var cat    = relatedCategory(post, this.included);
                 var cover  = attr.coverImageUrl || null;
                 var path   = postPath(post);
+                var isDraft = attr.isPublished === false;
 
                 return m('a', {
                     href: path,
-                    className: 'LinkRobinsBlog-card',
+                    className: 'LinkRobinsBlog-card' + (isDraft ? ' LinkRobinsBlog-card--draft' : ''),
                     onclick: function (e) { safeNavigate(path, e); },
                     key: 'p-' + post.id,
                 }, [
@@ -935,6 +1897,9 @@
                         cover ? m('img', { src: cover, alt: '', loading: 'lazy' }) : null
                     ),
                     m('div', { className: 'LinkRobinsBlog-card-body' }, [
+                        isDraft ? m('div', { className: 'LinkRobinsBlog-card-draftBadge' }, [
+                            m('i', { className: 'fas fa-eye-slash' }), ' Draft'
+                        ]) : null,
                         cat ? m('div', { className: 'LinkRobinsBlog-tags' },
                             m('span', { className: 'LinkRobinsBlog-tag', style: 'color: ' + (cat.attributes.color || 'inherit') }, cat.attributes.name)
                         ) : null,
@@ -1015,6 +1980,30 @@
 
                 this._currentSlug = stripDatePrefix(this.attrs && this.attrs.slug || null);
                 this._load();
+
+                var self = this;
+                this._refreshUnregister = registerBlogRefreshListener(function (ev) {
+                    if (ev && ev.type === 'delete') {
+                        // The broadcast itself toasts on delete. Article
+                        // view stays put with stale data on screen; the
+                        // post is gone, but the loaded view is harmless.
+                        // (If we tried to navigate away, we'd hit the
+                        // homepage-is-blog-index no-op problem.)
+                        return;
+                    }
+
+                    // Save event: refresh in-place. The slug may have
+                    // changed (if the author edited it), so we re-derive
+                    // it from the current route attrs at refresh time.
+                    var nextSlug = stripDatePrefix(self.attrs && self.attrs.slug || null);
+                    if (nextSlug) {
+                        self._currentSlug = nextSlug;
+                        self.loading = true;
+                        self.post    = null;
+                        self.discussion = null;
+                        self._load();
+                    }
+                });
             }
 
             onupdate(vnode) {
@@ -1036,6 +2025,7 @@
 
             onremove(vnode) {
                 try { applyBlogBodyClass(false); } catch (e) {}
+                try { if (this._refreshUnregister) this._refreshUnregister(); } catch (e) {}
                 try { if (super.onremove) super.onremove(vnode); } catch (e) {}
             }
 
@@ -1176,6 +2166,7 @@
                                 m('h1', { className: 'LinkRobinsBlog-post-title' }, attr.title),
                                 (attr.excerpt && attr.excerpt.trim()) ? m('p', { className: 'LinkRobinsBlog-post-excerpt' }, attr.excerpt) : null,
                                 self._renderPostMeta(author, attr),
+                                self._renderManageMenu(),
                             ]),
                             cover ? m('div', { className: 'LinkRobinsBlog-post-cover' }, [
                                 m('img', { src: cover, alt: attr.title }),
@@ -1320,6 +2311,94 @@
                     ]));
                 }
                 return m('div', { className: 'LinkRobinsBlog-post-meta' }, children);
+            }
+
+            _renderManageMenu() {
+                var self = this;
+                if (!self.post) return null;
+                if (!canEditBlogPost(self.post)) return null;
+
+                if (self._manageMenuOpen === undefined) self._manageMenuOpen = false;
+
+                // Toggle wiring uses a one-shot document listener installed
+                // on open so a click anywhere outside the menu collapses it.
+                function setOpen(next) {
+                    self._manageMenuOpen = next;
+                    if (next) {
+                        var handler = function (ev) {
+                            try {
+                                if (ev && ev.target && ev.target.closest
+                                        && ev.target.closest('.LinkRobinsBlog-manageMenu')) {
+                                    return;
+                                }
+                            } catch (e) {}
+                            self._manageMenuOpen = false;
+                            document.removeEventListener('click', handler, true);
+                            try { m.redraw(); } catch (e) {}
+                        };
+                        setTimeout(function () {
+                            document.addEventListener('click', handler, true);
+                        }, 0);
+                    }
+                    try { m.redraw(); } catch (e) {}
+                }
+
+                var items = [];
+                items.push(m('button', {
+                    type:      'button',
+                    className: 'LinkRobinsBlog-manageMenu-item',
+                    onclick:   function () {
+                        setOpen(false);
+                        openPostEditor(self.post, null);
+                    },
+                }, [m('i', { className: 'fas fa-pencil-alt' }), ' Edit post']));
+
+                items.push(m('button', {
+                    type:      'button',
+                    className: 'LinkRobinsBlog-manageMenu-item LinkRobinsBlog-manageMenu-item--danger',
+                    onclick:   function () {
+                        setOpen(false);
+                        var attr = self.post.attributes || {};
+                        var ok = false;
+                        try { ok = window.confirm('Delete "' + (attr.title || 'this post') + '"? This cannot be undone.'); } catch (e) {}
+                        if (!ok) return;
+                        var deletedId = self.post.id;
+                        deleteBlogPost(deletedId)
+                            .then(function () {
+                                // Broadcast carries the delete event; the
+                                // article page's own listener handles the
+                                // success toast. We don't try to navigate
+                                // away because the index route may equal
+                                // the current path (when blog is the site
+                                // homepage), making m.route.set a no-op.
+                                broadcastBlogRefresh({ type: 'delete', postId: deletedId });
+                            })
+                            .catch(function (err) {
+                                console.error('[linkrobins/blog] delete failed:', err);
+                                showBlogAlert('error', 'Could not delete the post.');
+                            });
+                    },
+                }, [m('i', { className: 'fas fa-trash' }), ' Delete post']));
+
+                return m('div', {
+                    className: 'LinkRobinsBlog-manageMenu' + (self._manageMenuOpen ? ' is-open' : ''),
+                }, [
+                    m('button', {
+                        type:      'button',
+                        className: 'Button Button--default Button--more LinkRobinsBlog-manageMenu-trigger',
+                        'aria-haspopup': 'menu',
+                        'aria-expanded': self._manageMenuOpen ? 'true' : 'false',
+                        'aria-label': 'Manage post',
+                        title:     'Manage post',
+                        onclick:   function (ev) {
+                            ev.stopPropagation();
+                            setOpen(!self._manageMenuOpen);
+                        },
+                    }, m('i', { className: 'icon fas fa-ellipsis-h' })),
+                    self._manageMenuOpen
+                        ? m('div', { className: 'LinkRobinsBlog-manageMenu-popover', role: 'menu' }, items)
+                        : null,
+                ]);
             }
 
             _renderBody(attr) {

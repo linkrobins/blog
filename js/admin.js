@@ -121,7 +121,6 @@
         }
 
         var BlogAdminPage = makeBlogAdminPage(ExtensionPage, LoadingIndicator);
-        var PostEditorModal     = Modal ? makePostEditorModal(Modal) : null;
         var CategoryEditorModal = Modal ? makeCategoryEditorModal(Modal) : null;
 
         if (!app.registry || typeof app.registry.for !== 'function') {
@@ -133,7 +132,6 @@
             .for('linkrobins-blog')
             .registerPage(BlogAdminPage);
 
-        window.LinkRobinsBlogPostEditorModal     = PostEditorModal;
         window.LinkRobinsBlogCategoryEditorModal = CategoryEditorModal;
 
         // Add Blog as a homepage option in admin → Basics → Home page
@@ -151,6 +149,26 @@
             }
         } catch (e) {
             console.warn('[linkrobins/blog] could not extend BasicsPage:', e);
+        }
+
+        // Register the two blog permissions so they appear on the admin
+        // Permissions page. The .start permission grants authoring rights;
+        // .moderate grants editing/deleting others' posts.
+        try {
+            if (app.registry && typeof app.registry.registerPermission === 'function') {
+                app.registry.registerPermission({
+                    permission: 'linkrobins-blog.start',
+                    icon:       'fas fa-feather-alt',
+                    label:      'Create blog posts',
+                }, 'start', 95);
+                app.registry.registerPermission({
+                    permission: 'linkrobins-blog.moderate',
+                    icon:       'fas fa-feather-alt',
+                    label:      'Edit and delete any blog post',
+                }, 'moderate', 95);
+            }
+        } catch (e) {
+            console.warn('[linkrobins/blog] could not register permissions:', e);
         }
     }
 
@@ -241,7 +259,7 @@
         return class BlogAdminPage extends ExtensionPage {
             oninit(vnode) {
                 super.oninit(vnode);
-                this.tab          = 'posts';
+                this.tab          = 'categories';
                 this.loading      = true;
                 this.posts        = [];
                 this.categories   = [];
@@ -255,12 +273,8 @@
                 self.loading = true;
                 m.redraw();
 
-                Promise.all([fetchPostsList(), fetchCategoriesList()])
-                    .then(function (results) {
-                        var postsResp     = results[0];
-                        var categoriesResp = results[1];
-                        self.posts      = (postsResp && postsResp.data) || [];
-                        self.included   = (postsResp && postsResp.included) || [];
+                fetchCategoriesList()
+                    .then(function (categoriesResp) {
                         self.categories = (categoriesResp && categoriesResp.data) || [];
                         self.loading    = false;
                         m.redraw();
@@ -283,7 +297,6 @@
             _renderTabs() {
                 var self = this;
                 var tabs = [
-                    { id: 'posts',       label: 'Posts',       icon: 'fas fa-feather-alt' },
                     { id: 'categories',  label: 'Categories',  icon: 'fas fa-folder' },
                     { id: 'subscribers', label: 'Subscribers', icon: 'fas fa-envelope' },
                     { id: 'settings',    label: 'Settings',    icon: 'fas fa-sliders-h' },
@@ -309,77 +322,10 @@
             }
 
             _renderTabContent() {
-                if (this.tab === 'posts')       return this._renderPostsTab();
                 if (this.tab === 'categories')  return this._renderCategoriesTab();
                 if (this.tab === 'subscribers') return this._renderSubscribersTab();
                 if (this.tab === 'settings')    return this._renderSettingsTab();
                 return m('div', { className: 'LinkRobinsBlog-admin-empty' }, 'Coming soon.');
-            }
-
-            _renderPostsTab() {
-                var self = this;
-                if (self.loading) {
-                    return m('div', { className: 'LinkRobinsBlog-admin-loading' },
-                        LoadingIndicator ? m(LoadingIndicator) : 'Loading...');
-                }
-                if (self.error) {
-                    return m('div', { className: 'LinkRobinsBlog-admin-empty' }, 'Could not load posts.');
-                }
-
-                return m('div', { className: 'LinkRobinsBlog-admin-posts' }, [
-                    m('div', { className: 'LinkRobinsBlog-admin-postsHeader' }, [
-                        m('h3', null, 'All posts (' + self.posts.length + ')'),
-                        m('button', {
-                            type:      'button',
-                            className: 'Button Button--primary',
-                            onclick:   function () { self._openEditor(null); },
-                        }, [m('i', { className: 'fas fa-plus' }), ' New post']),
-                    ]),
-                    self.posts.length === 0
-                        ? m('div', { className: 'LinkRobinsBlog-admin-empty' }, 'No posts yet. Click "New post" to write your first one.')
-                        : self._renderPostsTable(),
-                ]);
-            }
-
-            _renderPostsTable() {
-                var self = this;
-                return m('table', { className: 'LinkRobinsBlog-admin-postsTable' }, [
-                    m('thead', null, m('tr', null, [
-                        m('th', null, 'Title'),
-                        m('th', null, 'Status'),
-                        m('th', null, 'Category'),
-                        m('th', null, 'Date'),
-                        m('th', { style: 'width: 1%; white-space: nowrap;' }, 'Actions'),
-                    ])),
-                    m('tbody', null, self.posts.map(function (post) {
-                        var attr = post.attributes;
-                        var cat  = relatedCategory(post, self.included);
-                        return m('tr', { key: 'p-' + post.id }, [
-                            m('td', null, [
-                                m('strong', null, attr.title),
-                                attr.excerpt ? m('div', { className: 'LinkRobinsBlog-admin-postsTable-excerpt' }, attr.excerpt) : null,
-                            ]),
-                            m('td', null, attr.isPublished
-                                ? m('span', { className: 'LinkRobinsBlog-admin-badge LinkRobinsBlog-admin-badge--published' }, 'Published')
-                                : m('span', { className: 'LinkRobinsBlog-admin-badge LinkRobinsBlog-admin-badge--draft' }, 'Draft')),
-                            m('td', null, cat ? cat.attributes.name : '—'),
-                            m('td', null, formatDate(attr.publishedAt || attr.createdAt) || '—'),
-                            m('td', { style: 'white-space: nowrap;' }, [
-                                m('button', {
-                                    type:      'button',
-                                    className: 'Button Button--text LinkRobinsBlog-admin-rowAction',
-                                    onclick:   function () { self._openEditor(post); },
-                                }, [m('i', { className: 'fas fa-pencil-alt' }), ' Edit']),
-                                ' ',
-                                m('button', {
-                                    type:      'button',
-                                    className: 'Button Button--text LinkRobinsBlog-admin-rowAction LinkRobinsBlog-admin-rowAction--danger',
-                                    onclick:   function () { self._deletePost(post); },
-                                }, [m('i', { className: 'fas fa-trash' }), ' Delete']),
-                            ]),
-                        ]);
-                    })),
-                ]);
             }
 
             _renderCategoriesTab() {
@@ -761,681 +707,9 @@
                 ]);
             }
 
-            _openEditor(post) {
-                var self = this;
-                if (!window.LinkRobinsBlogPostEditorModal) {
-                    alert('Post editor is not available.');
-                    return;
-                }
-                app.modal.show(window.LinkRobinsBlogPostEditorModal, {
-                    post:       post,
-                    categories: self.categories,
-                    onSaved:    function () { self._loadData(); },
-                });
-            }
-
-            _deletePost(post) {
-                var self = this;
-                var ok = false;
-                try { ok = window.confirm('Delete "' + post.attributes.title + '"? This cannot be undone.'); } catch (e) {}
-                if (!ok) return;
-                deleteBlogPost(post.id)
-                    .then(function () { self._loadData(); })
-                    .catch(function (err) {
-                        console.error('[linkrobins/blog] delete failed:', err);
-                        try { alert('Could not delete the post.'); } catch (e) {}
-                    });
-            }
         };
     }
 
-    function makePostEditorModal(Modal) {
-        return class PostEditorModal extends Modal {
-            static get isDismissibleViaBackdropClick() { return false; }
-
-            oninit(vnode) {
-                super.oninit(vnode);
-
-                var post = this.attrs.post;
-                var attr = post ? post.attributes : {};
-                var cat  = post ? (post.relationships
-                    && post.relationships.category
-                    && post.relationships.category.data) : null;
-
-                this.editId      = post ? post.id : null;
-                this.titleText   = attr.title       || '';
-                this.slug        = attr.slug        || '';
-                this.excerpt     = attr.excerpt     || '';
-                this.cover       = attr.coverImageUrl || '';
-                this.coverCredit = attr.coverImageCredit || '';
-                this.bodyText    = attr.content     || '';
-                this.visibility  = attr.visibility  || 'public';
-                this.categoryId  = cat ? cat.id : '';
-                this.isPublished = attr.isPublished === true;
-                // commentsEnabled defaults to true for new posts and for existing posts where the field isn't set
-                this.commentsEnabled = post ? (attr.commentsEnabled !== false) : true;
-                this.saving      = false;
-                this.error       = null;
-                this.coverUploading   = false;
-                this.coverUploadError = null;
-                this.bodyUploading   = false;
-                this.bodyUploadIndex = 0;
-                this.bodyUploadTotal = 0;
-                this.bodyUploadError = null;
-                this._userEditedSlug = !!post;
-            }
-
-            className()  { return 'Modal--large LinkRobinsBlog-editorModal'; }
-            title()      { return this.editId ? 'Edit post' : 'New post'; }
-
-            content() {
-                var self = this;
-                return m('div', { className: 'Modal-body LinkRobinsBlog-editor' }, [
-                    self.error ? m('div', { className: 'Alert Alert--danger' }, [
-                        m('span', { className: 'Alert-body' }, 'Could not save: ' + self._errorMessage()),
-                    ]) : null,
-                    m('div', { className: 'Form-body' }, [
-                        self._renderTitleAndSlug(),
-                        self._renderExcerpt(),
-                        self._renderCover(),
-                        self._renderMeta(),
-                        m('div', { className: 'LinkRobinsBlog-editor-bodyWrapper' }, [
-                            self._renderToolbar(),
-                            self._renderBody(),
-                        ]),
-                        self._renderNewsletter(),
-                    ]),
-                    self._renderActions(),
-                ]);
-            }
-
-            _renderNewsletter() {
-                var self = this;
-                if (!self.editId) return null;
-                if (!self.isPublished) return null;
-
-                var attr = (self.attrs.post && self.attrs.post.attributes) || {};
-                var sentAt = attr.broadcastSentAt || null;
-                var sending = !!self._newsletterSending;
-                var status  = self._newsletterStatus;
-
-                var label;
-                if (sending) {
-                    label = 'Sending…';
-                } else if (sentAt) {
-                    label = 'Re-send newsletter';
-                } else {
-                    label = 'Send newsletter';
-                }
-
-                return m('fieldset', { className: 'Form-group LinkRobinsBlog-editor-newsletter' }, [
-                    m('legend', null, 'Newsletter'),
-                    m('p', { className: 'helpText' },
-                        sentAt
-                            ? ('Already sent on ' + self._formatDate(sentAt) + '. '
-                                + 'Re-sending will email every current subscriber again — use this only if the first send had a problem.')
-                            : 'Email this post to every subscriber on the newsletter list. Uses Flarum\u2019s configured SMTP settings.'),
-                    m('div', { className: 'LinkRobinsBlog-editor-newsletter-actions' }, [
-                        m('button', {
-                            type:      'button',
-                            className: 'Button' + (sentAt ? '' : ' Button--primary'),
-                            disabled:  sending,
-                            onclick:   function () { self._sendNewsletter(!!sentAt); },
-                        }, [m('i', { className: 'fas fa-paper-plane' }), ' ', label]),
-                    ]),
-                    status
-                        ? m('div', {
-                            className: 'Alert ' + (status.ok ? 'Alert--success' : 'Alert--danger'),
-                            style: 'margin-top:10px;',
-                          }, status.message)
-                        : null,
-                ]);
-            }
-
-            _formatDate(iso) {
-                try {
-                    var d = new Date(iso);
-                    if (isNaN(d.getTime())) return iso;
-                    return d.toLocaleString();
-                } catch (e) { return iso; }
-            }
-
-            _sendNewsletter(isResend) {
-                var self = this;
-
-                var confirmMsg = isResend
-                    ? 'Re-send the newsletter? Every current subscriber will be emailed again.'
-                    : 'Send the newsletter for this post? Every subscriber will receive an email.';
-                if (!window.confirm(confirmMsg)) return;
-
-                self._newsletterSending = true;
-                self._newsletterStatus = null;
-                m.redraw();
-
-                var url = app.forum.attribute('apiUrl')
-                    + '/linkrobins-blog/posts/' + encodeURIComponent(self.editId) + '/broadcast'
-                    + (isResend ? '?force=1' : '');
-
-                app.request({ method: 'POST', url: url })
-                    .then(function (resp) {
-                        self._newsletterSending = false;
-                        var sentAt = resp && resp.sent_at;
-                        var count  = resp && resp.subscriber_count;
-                        if (sentAt && self.attrs.post && self.attrs.post.attributes) {
-                            self.attrs.post.attributes.broadcastSentAt = sentAt;
-                        }
-                        self._newsletterStatus = {
-                            ok: true,
-                            message: resp && resp.status === 'queued'
-                                ? ('Queued for ' + count + ' subscriber'
-                                    + (count === 1 ? '' : 's')
-                                    + '. Emails will go out shortly.')
-                                : ('Sent to ' + count + ' subscriber'
-                                    + (count === 1 ? '' : 's') + '.'),
-                        };
-                        m.redraw();
-                    })
-                    .catch(function (err) {
-                        self._newsletterSending = false;
-                        var detail = '';
-                        try {
-                            detail = err && err.response && err.response.errors
-                                && err.response.errors[0] && err.response.errors[0].detail;
-                        } catch (e) {}
-                        self._newsletterStatus = {
-                            ok: false,
-                            message: 'Could not send the newsletter' + (detail ? ': ' + detail : '.'),
-                        };
-                        console.error('[linkrobins/blog] broadcast failed:', err);
-                        m.redraw();
-                    });
-            }
-
-            _errorMessage() {
-                var err = this.error;
-                if (!err) return 'unknown error';
-                try {
-                    var errors = err.response && err.response.errors;
-                    if (errors && errors[0]) {
-                        var src = errors[0].source && (errors[0].source.pointer || errors[0].source.parameter);
-                        return (errors[0].detail || errors[0].title || 'error') + (src ? ' (' + src + ')' : '');
-                    }
-                } catch (e) {}
-                return (err.message || err.statusText || 'unknown error');
-            }
-
-            _renderTitleAndSlug() {
-                var self = this;
-                return m('div', { className: 'Form-group' }, [
-                    m('label', null, 'Title'),
-                    m('input', {
-                        type:       'text',
-                        className:  'FormControl',
-                        value:      self.titleText,
-                        disabled:   self.saving,
-                        placeholder: 'e.g. Why I built this',
-                        oninput:    function (e) {
-                            self.titleText = e.target.value;
-                            if (!self.editId) {
-                                self.slug = slugify(self.titleText);
-                            }
-                        },
-                    }),
-                ]);
-            }
-
-            _renderExcerpt() {
-                var self = this;
-                return m('div', { className: 'Form-group' }, [
-                    m('label', null, 'Excerpt ', m('span', { className: 'LinkRobinsBlog-editor-optional' }, '(optional)')),
-                    m('textarea', {
-                        className:  'FormControl',
-                        value:      self.excerpt,
-                        disabled:   self.saving,
-                        rows:       2,
-                        placeholder: 'Optional summary for cards. If empty, the first paragraph of the body is used.',
-                        oninput:    function (e) { self.excerpt = e.target.value; },
-                    }),
-                ]);
-            }
-
-            _renderCover() {
-                var self = this;
-                var hasFofUpload = isFofUploadInstalled();
-                return m('div', { className: 'Form-group LinkRobinsBlog-editor-coverGroup' }, [
-                    m('label', null, 'Cover image'),
-                    m('div', { className: 'LinkRobinsBlog-editor-coverInputRow' }, [
-                        m('input', {
-                            type:        'text',
-                            className:   'FormControl',
-                            value:       self.cover,
-                            disabled:    self.saving || self.coverUploading,
-                            placeholder: 'https://example.com/image.jpg',
-                            oninput:     function (e) { self.cover = e.target.value; },
-                        }),
-                        hasFofUpload ? m('button', {
-                            type:      'button',
-                            className: 'Button LinkRobinsBlog-editor-coverUploadBtn',
-                            disabled:  self.saving || self.coverUploading,
-                            onclick:   function () { self._pickCoverFile(); },
-                        }, [
-                            self.coverUploading
-                                ? m('i', { className: 'fas fa-spinner fa-spin LinkRobinsBlog-editor-coverUploadIcon' })
-                                : m('i', { className: 'fas fa-upload LinkRobinsBlog-editor-coverUploadIcon' }),
-                            ' ',
-                            self.coverUploading ? 'Uploading…' : 'Upload',
-                        ]) : null,
-                        // Hidden file input the Upload button triggers.
-                        hasFofUpload ? m('input', {
-                            type:     'file',
-                            accept:   'image/*',
-                            style:    'display: none;',
-                            oncreate: function (vnode) { self._coverFileInput = vnode.dom; },
-                            onchange: function (e) {
-                                var f = e.target && e.target.files && e.target.files[0];
-                                if (f) self._uploadCover(f);
-                                if (e.target) e.target.value = '';
-                            },
-                        }) : null,
-                    ]),
-                    !hasFofUpload ? m('div', { className: 'helpText' },
-                        'Paste a URL above. Install fof/upload to get a direct upload button.'
-                    ) : null,
-                    self.coverUploadError ? m('div', { className: 'Alert Alert--danger', style: 'margin-top:8px' },
-                        m('span', { className: 'Alert-body' }, self.coverUploadError)
-                    ) : null,
-                    self.cover ? m('div', { className: 'LinkRobinsBlog-editor-coverPreview' },
-                        m('img', { src: self.cover, alt: '', onerror: function (e) { e.target.style.display = 'none'; } })
-                    ) : null,
-                    m('div', { className: 'Form-group LinkRobinsBlog-editor-coverCreditGroup' }, [
-                        m('label', null, 'Image credit (optional)'),
-                        m('input', {
-                            type:        'text',
-                            className:   'FormControl',
-                            value:       self.coverCredit || '',
-                            disabled:    self.saving,
-                            placeholder: 'Photo by Jane Doe on Unsplash',
-                            oninput:     function (e) { self.coverCredit = e.target.value; },
-                        }),
-                        m('div', { className: 'helpText' },
-                            'Shown as a small caption under the cover image. Supports plain text or HTML.'
-                        ),
-                    ]),
-                ]);
-            }
-
-            _pickCoverFile() {
-                if (this._coverFileInput) this._coverFileInput.click();
-            }
-
-            _uploadCover(file) {
-                var self = this;
-                if (!file) return;
-                self.coverUploading   = true;
-                self.coverUploadError = null;
-                m.redraw();
-
-                var body = new FormData();
-                body.append('files[]', file);
-
-                app.request({
-                    method:    'POST',
-                    url:       app.forum.attribute('apiUrl') + '/fof/upload',
-                    serialize: function (raw) { return raw; },
-                    body:      body,
-                })
-                .then(function (resp) {
-                    self.coverUploading = false;
-                    var data = resp && resp.data;
-                    var uploaded = (data && data[0]) || null;
-                    var url = uploaded && uploaded.attributes && uploaded.attributes.url;
-                    if (url) {
-                        self.cover = url;
-                    } else {
-                        self.coverUploadError = 'Upload succeeded but no URL was returned.';
-                    }
-                    m.redraw();
-                })
-                .catch(function (err) {
-                    self.coverUploading = false;
-                    console.error('[linkrobins/blog] cover upload failed:', err);
-                    var msg = 'Upload failed.';
-                    if (err && err.response && err.response.errors && err.response.errors[0]) {
-                        var e = err.response.errors[0];
-                        msg = (e.detail || e.title || msg);
-                    } else if (err && err.status === 404) {
-                        msg = 'Upload endpoint not found. Is the fof/upload extension installed and enabled?';
-                    }
-                    self.coverUploadError = msg;
-                    m.redraw();
-                });
-            }
-
-            _renderMeta() {
-                var self = this;
-                return m('div', { className: 'LinkRobinsBlog-editor-row' }, [
-                    m('div', { className: 'Form-group' }, [
-                        m('label', null, 'Category'),
-                        m('select', {
-                            className: 'FormControl',
-                            value:     self.categoryId,
-                            disabled:  self.saving,
-                            onchange:  function (e) { self.categoryId = e.target.value; },
-                        }, [
-                            m('option', { value: '' }, '— Uncategorized —'),
-                            (self.attrs.categories || []).map(function (cat) {
-                                return m('option', { value: cat.id, key: 'c-' + cat.id }, cat.attributes.name);
-                            }),
-                        ]),
-                    ]),
-                    m('div', { className: 'Form-group' }, [
-                        m('label', null, 'Visibility'),
-                        m('select', {
-                            className: 'FormControl',
-                            value:     self.visibility,
-                            disabled:  self.saving,
-                            onchange:  function (e) { self.visibility = e.target.value; },
-                        }, [
-                            m('option', { value: 'public' }, 'Public — anyone can read'),
-                            m('option', { value: 'members' }, 'Members only — login required'),
-                        ]),
-                    ]),
-                    m('div', { className: 'Form-group LinkRobinsBlog-editor-commentsToggle' }, [
-                        m('label', null, 'Comments'),
-                        m('label', { className: 'LinkRobinsBlog-editor-commentsToggle-row' }, [
-                            m('input', {
-                                type:     'checkbox',
-                                checked:  self.commentsEnabled !== false,
-                                disabled: self.saving,
-                                onchange: function (e) { self.commentsEnabled = !!e.target.checked; },
-                            }),
-                            m('span', null, ' Allow comments on this post'),
-                        ]),
-                    ]),
-                ]);
-            }
-
-            _renderToolbar() {
-                var self = this;
-                var btns = [
-                    { icon: 'fas fa-bold',           title: 'Bold',         apply: function (ta) { insertAtCursor(ta, '**', '**', 'bold text'); } },
-                    { icon: 'fas fa-italic',         title: 'Italic',       apply: function (ta) { insertAtCursor(ta, '*',  '*',  'italic text'); } },
-                    { icon: 'fas fa-heading',        title: 'Heading',      apply: function (ta) { insertAtCursor(ta, '\n## ', '', 'Heading'); } },
-                    { icon: 'fas fa-link',           title: 'Link',         apply: function (ta) {
-                        var url = '';
-                        try { url = window.prompt('URL:', 'https://') || ''; } catch (e) {}
-                        if (!url) return;
-                        insertAtCursor(ta, '[', '](' + url + ')', 'link text');
-                    } },
-                    { icon: 'fas fa-image',          title: 'Image (URL)',  apply: function (ta) {
-                        var url = '';
-                        try { url = window.prompt('Image URL:', 'https://') || ''; } catch (e) {}
-                        if (!url) return;
-                        insertAtCursor(ta, '![', '](' + url + ')', 'alt text');
-                    } },
-                    { icon: 'fas fa-code',           title: 'Inline code',  apply: function (ta) { insertAtCursor(ta, '`',  '`', 'code'); } },
-                    { icon: 'fas fa-file-code',      title: 'Code block',   apply: function (ta) { insertAtCursor(ta, '\n```\n', '\n```\n', 'code here'); } },
-                    { icon: 'fas fa-eye-slash',      title: 'Spoiler',      apply: function (ta) { insertAtCursor(ta, '[spoiler]', '[/spoiler]', 'hidden text'); } },
-                    { icon: 'fas fa-table',          title: 'Table',        apply: function (ta) {
-                        insertAtCursor(ta, '\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n', '', '');
-                    } },
-                    { icon: 'fas fa-quote-right',    title: 'Quote',        apply: function (ta) { insertAtCursor(ta, '\n> ', '', 'quoted text'); } },
-                    { icon: 'fas fa-list-ul',        title: 'Bulleted list',apply: function (ta) { insertAtCursor(ta, '\n- ', '',  'item'); } },
-                    { icon: 'fas fa-list-ol',        title: 'Numbered list',apply: function (ta) { insertAtCursor(ta, '\n1. ', '', 'item'); } },
-                ];
-
-                var children = btns.map(function (b) {
-                    return m('button', {
-                        type:      'button',
-                        className: 'LinkRobinsBlog-editor-toolbarBtn',
-                        title:     b.title,
-                        disabled:  self.saving,
-                        onclick:   function () {
-                            var ta = document.getElementById('LinkRobinsBlog-editor-body');
-                            b.apply(ta);
-                        },
-                    }, m('i', { className: b.icon }));
-                });
-
-                if (isFofUploadInstalled()) {
-                    children.push(m('span', { className: 'LinkRobinsBlog-editor-toolbarSep' }));
-                    children.push(m('button', {
-                        type:      'button',
-                        className: 'LinkRobinsBlog-editor-toolbarBtn LinkRobinsBlog-editor-toolbarBtn--upload',
-                        title:     'Upload image(s)',
-                        disabled:  self.saving || self.bodyUploading,
-                        onclick:   function () { self._pickBodyFiles(); },
-                    }, [
-                        self.bodyUploading
-                            ? m('i', { className: 'fas fa-spinner fa-spin' })
-                            : m('i', { className: 'fas fa-cloud-upload-alt' }),
-                    ]));
-                }
-
-                return m('div', { className: 'LinkRobinsBlog-editor-toolbar' }, children);
-            }
-
-            _renderBody() {
-                var self = this;
-                var hasFofUpload = isFofUploadInstalled();
-                return m('div', { className: 'LinkRobinsBlog-editor-bodyGroup' }, [
-                    m('textarea', {
-                        id:         'LinkRobinsBlog-editor-body',
-                        className:  'FormControl LinkRobinsBlog-editor-bodyInput',
-                        value:      self.bodyText,
-                        disabled:   self.saving,
-                        rows:       16,
-                        placeholder: 'Write in markdown. **bold**, *italic*, [links](https://...), and so on.',
-                        oninput:    function (e) { self.bodyText = e.target.value; },
-                    }),
-                    hasFofUpload ? m('input', {
-                        type:     'file',
-                        accept:   'image/*',
-                        multiple: true,
-                        style:    'display: none;',
-                        oncreate: function (vnode) { self._bodyFileInput = vnode.dom; },
-                        onchange: function (e) {
-                            var files = e.target && e.target.files;
-                            if (files && files.length) self._uploadBodyFiles(files);
-                            if (e.target) e.target.value = '';
-                        },
-                    }) : null,
-                    self.bodyUploading ? m('div', { className: 'LinkRobinsBlog-editor-bodyUploadStatus' }, [
-                        m('i', { className: 'fas fa-spinner fa-spin' }),
-                        ' Uploading ' + (self.bodyUploadIndex || 0) + ' of ' + (self.bodyUploadTotal || 0) + '…',
-                    ]) : null,
-                    self.bodyUploadError ? m('div', { className: 'Alert Alert--danger LinkRobinsBlog-editor-bodyUploadError' },
-                        m('span', { className: 'Alert-body' }, self.bodyUploadError)
-                    ) : null,
-                ]);
-            }
-
-            _pickBodyFiles() {
-                if (this._bodyFileInput) this._bodyFileInput.click();
-            }
-
-            _uploadBodyFiles(files) {
-                var self = this;
-                var list = Array.prototype.slice.call(files);
-                if (!list.length) return;
-
-                self.bodyUploading   = true;
-                self.bodyUploadTotal = list.length;
-                self.bodyUploadIndex = 0;
-                self.bodyUploadError = null;
-                m.redraw();
-
-                var processNext = function (i) {
-                    if (i >= list.length) {
-                        self.bodyUploading   = false;
-                        self.bodyUploadIndex = 0;
-                        self.bodyUploadTotal = 0;
-                        m.redraw();
-                        return;
-                    }
-                    self.bodyUploadIndex = i + 1;
-                    m.redraw();
-
-                    var file = list[i];
-                    var body = new FormData();
-                    body.append('files[]', file);
-
-                    app.request({
-                        method:    'POST',
-                        url:       app.forum.attribute('apiUrl') + '/fof/upload',
-                        serialize: function (raw) { return raw; },
-                        body:      body,
-                    })
-                    .then(function (resp) {
-                        var data = resp && resp.data;
-                        var uploaded = (data && data[0]) || null;
-                        var url = uploaded && uploaded.attributes && uploaded.attributes.url;
-                        var name = (uploaded && uploaded.attributes && (uploaded.attributes.baseName || uploaded.attributes.path)) || (file.name || 'image');
-                        if (url) {
-                            // Insert markdown image at end of body (newline-separated).
-                            var ta = document.getElementById('LinkRobinsBlog-editor-body');
-                            var snippet = '![' + name.replace(/[\[\]]/g, '') + '](' + url + ')';
-                            if (ta && typeof ta.selectionStart === 'number') {
-                                // Insert at cursor on first iteration; subsequent ones append after the inserted text.
-                                var insertText = (ta.value && !/\n\n$/.test(ta.value) && ta.selectionStart === ta.value.length ? '\n\n' : '') + snippet + '\n\n';
-                                var start = ta.selectionStart, end = ta.selectionEnd;
-                                ta.value = ta.value.slice(0, start) + insertText + ta.value.slice(end);
-                                var pos = start + insertText.length;
-                                ta.selectionStart = ta.selectionEnd = pos;
-                                self.bodyText = ta.value;
-                            } else {
-                                var sep = (self.bodyText && !/\n\n$/.test(self.bodyText)) ? '\n\n' : '';
-                                self.bodyText = (self.bodyText || '') + sep + snippet + '\n\n';
-                            }
-                        }
-                        processNext(i + 1);
-                    })
-                    .catch(function (err) {
-                        console.error('[linkrobins/blog] body upload failed:', err);
-                        var msg = 'Upload failed.';
-                        if (err && err.response && err.response.errors && err.response.errors[0]) {
-                            var e = err.response.errors[0];
-                            msg = e.detail || e.title || msg;
-                        } else if (err && err.status === 404) {
-                            msg = 'Upload endpoint not found. Is the fof/upload extension installed and enabled?';
-                        }
-                        self.bodyUploading   = false;
-                        self.bodyUploadError = msg + ' (' + (file.name || 'file') + ')';
-                        self.bodyUploadIndex = 0;
-                        self.bodyUploadTotal = 0;
-                        m.redraw();
-                    });
-                };
-
-                processNext(0);
-            }
-
-            _renderActions() {
-                var self = this;
-                var hasTitle = (self.titleText || '').trim() !== '';
-                var hasBody  = (self.bodyText  || '').trim() !== '';
-                var canSave  = hasTitle && hasBody && !self.saving;
-
-                var children = [
-                    m('div', { className: 'LinkRobinsBlog-editor-actions-primary' }, [
-                        m('button', {
-                            type:      'button',
-                            className: 'Button Button--primary',
-                            disabled:  !canSave,
-                            onclick:   function () { self._save(true); },
-                        }, self.saving
-                            ? 'Saving…'
-                            : (self.editId
-                                ? (self.isPublished ? 'Update' : 'Publish')
-                                : 'Publish')),
-                        m('button', {
-                            type:      'button',
-                            className: 'Button',
-                            disabled:  !canSave,
-                            onclick:   function () { self._save(false); },
-                        }, self.saving ? 'Saving…' : 'Save as draft'),
-                        m('button', {
-                            type:      'button',
-                            className: 'Button Button--text',
-                            disabled:  self.saving,
-                            onclick:   function () { self.hide(); },
-                        }, 'Cancel'),
-                    ]),
-                ];
-
-                if (self.editId) {
-                    children.push(
-                        m('button', {
-                            type:      'button',
-                            className: 'Button Button--text LinkRobinsBlog-editor-deleteBtn',
-                            disabled:  self.saving,
-                            onclick:   function () {
-                                if (!window.confirm('Delete this post? This cannot be undone.')) return;
-                                self.saving = true;
-                                self.error  = null;
-                                m.redraw();
-                                deleteBlogPost(self.editId).then(function () {
-                                    var cb = self.attrs && self.attrs.onSaved;
-                                    if (cb) cb();
-                                    self.hide();
-                                }).catch(function (err) {
-                                    self.saving = false;
-                                    self.error  = err;
-                                    m.redraw();
-                                });
-                            },
-                        }, 'Delete Post')
-                    );
-                }
-
-                return m('div', { className: 'LinkRobinsBlog-editor-actions' }, children);
-            }
-
-            _save(publishFlag) {
-                var self = this;
-                self.saving = true;
-                self.error  = null;
-                m.redraw();
-
-                var attributes = {
-                    title:            self.titleText.trim(),
-                    slug:             self.slug.trim() || slugify(self.titleText),
-                    excerpt:          self.excerpt || '',
-                    content:          self.bodyText,
-                    coverImageUrl:    self.cover || null,
-                    coverImageCredit: (self.coverCredit && self.coverCredit.trim()) || null,
-                    visibility:       self.visibility,
-                    isPublished:      publishFlag,
-                    commentsEnabled:  self.commentsEnabled !== false,
-                };
-                if (publishFlag && !self.editId) {
-                    attributes.publishedAt = new Date().toISOString();
-                } else if (publishFlag && self.editId && !self.isPublished) {
-                    attributes.publishedAt = new Date().toISOString();
-                }
-
-                var categoryId    = self.categoryId || null;
-                var clearCategory = !categoryId;
-
-                var promise = self.editId
-                    ? updateBlogPost(self.editId, attributes, categoryId, clearCategory)
-                    : createBlogPost(attributes, categoryId);
-
-                promise
-                    .then(function () {
-                        self.saving = false;
-                        if (typeof self.attrs.onSaved === 'function') self.attrs.onSaved();
-                        self.hide();
-                    })
-                    .catch(function (err) {
-                        self.saving = false;
-                        self.error  = err;
-                        console.error('[linkrobins/blog] save failed:', err);
-                        m.redraw();
-                    });
-            }
-        };
-    }
 
     function makeCategoryEditorModal(Modal) {
         return class CategoryEditorModal extends Modal {
@@ -1452,6 +726,7 @@
                 this.color       = attr.color || '#7f7f7f';
                 this.icon        = attr.icon  || 'fas fa-folder';
                 this.position    = (typeof attr.position === 'number') ? attr.position : 0;
+                this.newsletterEnabled = !!attr.newsletterEnabled;
                 this.saving      = false;
                 this.error       = null;
                 this._userEditedSlug = !!cat;
@@ -1511,58 +786,70 @@
                             }),
                         ]),
 
-                        m('div', { className: 'LinkRobinsBlog-categoryEditor-row' }, [
-                            m('div', { className: 'Form-group LinkRobinsBlog-categoryEditor-colorGroup' }, [
-                                m('label', null, 'Color'),
-                                m('div', { className: 'LinkRobinsBlog-categoryEditor-colorRow' }, [
-                                    m('input', {
-                                        type:      'color',
-                                        className: 'LinkRobinsBlog-categoryEditor-colorPicker',
-                                        value:     /^#[0-9a-fA-F]{6}$/.test(self.color) ? self.color : '#7f7f7f',
-                                        oninput:   function (e) { self.color = e.target.value; },
-                                    }),
-                                    m('input', {
-                                        type:        'text',
-                                        className:   'FormControl',
-                                        value:       self.color,
-                                        placeholder: '#7f7f7f',
-                                        oninput:     function (e) { self.color = e.target.value; },
-                                    }),
-                                ]),
-                            ]),
-
-                            m('div', { className: 'Form-group LinkRobinsBlog-categoryEditor-iconGroup' }, [
-                                m('label', null, 'Icon (Font Awesome class)'),
-                                m('div', { className: 'LinkRobinsBlog-categoryEditor-iconRow' }, [
-                                    m('span', { className: 'LinkRobinsBlog-categoryEditor-iconPreview' },
-                                        m('i', { className: self.icon || 'fas fa-folder' })
-                                    ),
-                                    m('input', {
-                                        type:        'text',
-                                        className:   'FormControl',
-                                        value:       self.icon,
-                                        placeholder: 'fas fa-folder',
-                                        oninput:     function (e) { self.icon = e.target.value; },
-                                    }),
-                                ]),
-                                m('div', { className: 'helpText' }, 'e.g. fas fa-newspaper, far fa-comments, fab fa-github'),
-                            ]),
-
-                            m('div', { className: 'Form-group LinkRobinsBlog-categoryEditor-posGroup' }, [
-                                m('label', null, 'Position'),
+                        m('div', { className: 'Form-group' }, [
+                            m('label', null, 'Color'),
+                            m('div', { className: 'LinkRobinsBlog-categoryEditor-colorRow' }, [
                                 m('input', {
-                                    type:      'number',
-                                    className: 'FormControl',
-                                    value:     self.position,
-                                    min:       0,
-                                    step:      1,
-                                    oninput:   function (e) {
-                                        var v = parseInt(e.target.value, 10);
-                                        self.position = isNaN(v) ? 0 : v;
-                                    },
+                                    type:      'color',
+                                    className: 'LinkRobinsBlog-categoryEditor-colorPicker',
+                                    value:     /^#[0-9a-fA-F]{6}$/.test(self.color) ? self.color : '#7f7f7f',
+                                    oninput:   function (e) { self.color = e.target.value; },
                                 }),
-                                m('div', { className: 'helpText' }, 'Lower numbers sort first.'),
+                                m('input', {
+                                    type:        'text',
+                                    className:   'FormControl',
+                                    value:       self.color,
+                                    placeholder: '#7f7f7f',
+                                    oninput:     function (e) { self.color = e.target.value; },
+                                }),
                             ]),
+                        ]),
+
+                        m('div', { className: 'Form-group' }, [
+                            m('label', null, 'Icon (Font Awesome class)'),
+                            m('div', { className: 'LinkRobinsBlog-categoryEditor-iconRow' }, [
+                                m('span', { className: 'LinkRobinsBlog-categoryEditor-iconPreview' },
+                                    m('i', { className: self.icon || 'fas fa-folder' })
+                                ),
+                                m('input', {
+                                    type:        'text',
+                                    className:   'FormControl',
+                                    value:       self.icon,
+                                    placeholder: 'fas fa-folder',
+                                    oninput:     function (e) { self.icon = e.target.value; },
+                                }),
+                            ]),
+                            m('div', { className: 'helpText' }, 'e.g. fas fa-newspaper, far fa-comments, fab fa-github'),
+                        ]),
+
+                        m('div', { className: 'Form-group' }, [
+                            m('label', null, 'Position'),
+                            m('input', {
+                                type:      'number',
+                                className: 'FormControl',
+                                value:     self.position,
+                                min:       0,
+                                step:      1,
+                                oninput:   function (e) {
+                                    var v = parseInt(e.target.value, 10);
+                                    self.position = isNaN(v) ? 0 : v;
+                                },
+                            }),
+                            m('div', { className: 'helpText' }, 'Lower numbers sort first.'),
+                        ]),
+
+                        m('div', { className: 'Form-group' }, [
+                            m('label', { className: 'LinkRobinsBlog-categoryEditor-toggleRow' }, [
+                                m('input', {
+                                    type:    'checkbox',
+                                    checked: self.newsletterEnabled,
+                                    onchange: function (e) { self.newsletterEnabled = !!e.target.checked; },
+                                }),
+                                ' Send newsletter when a post is published in this category',
+                            ]),
+                            m('div', { className: 'helpText' },
+                                'Every subscriber will be emailed automatically when a post is first published here. '
+                                + 'Make sure your SMTP and sending domain are configured before turning this on.'),
                         ]),
                     ]),
 
@@ -1606,6 +893,7 @@
                     color:       (self.color || '').trim() || null,
                     icon:        (self.icon  || '').trim() || null,
                     position:    self.position || 0,
+                    newsletterEnabled: !!self.newsletterEnabled,
                 };
                 if (self.slug && self.slug.trim() !== '') attributes.slug = self.slug.trim();
 

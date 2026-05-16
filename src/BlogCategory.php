@@ -18,10 +18,12 @@ class BlogCategory extends AbstractModel
         'color',
         'icon',
         'position',
+        'newsletter_enabled',
     ];
 
     protected $casts = [
-        'position' => 'integer',
+        'position'           => 'integer',
+        'newsletter_enabled' => 'boolean',
     ];
 
     public function posts(): HasMany

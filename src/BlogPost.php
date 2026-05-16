@@ -33,7 +33,6 @@ class BlogPost extends AbstractModel implements Formattable
         'cover_image_url',
         'cover_image_credit',
         'category_id',
-        'user_id',
         'visibility',
         'is_published',
         'published_at',

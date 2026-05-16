@@ -34,11 +34,43 @@ class BlogPostResource extends AbstractDatabaseResource
     {
         $actor = $context->getActor();
 
-        if (! $actor->isAdmin()) {
-            $query->where('linkrobins_blog_posts.is_published', true);
+        // Visibility filter: who sees drafts?
+        //   - Admin or moderator: everything, no is_published filter
+        //   - Authors with .start: published posts + their own drafts
+        //   - Everyone else: published only
+        $canModerate = ! $actor->isGuest()
+            && ($actor->isAdmin() || $actor->hasPermission('linkrobins-blog.moderate'));
+        $canAuthor = ! $actor->isGuest()
+            && $actor->hasPermission('linkrobins-blog.start');
+
+        if (! $canModerate) {
+            if ($canAuthor) {
+                // Published OR mine
+                $actorId = (int) $actor->id;
+                $query->where(function ($q) use ($actorId) {
+                    $q->where('linkrobins_blog_posts.is_published', true)
+                      ->orWhere('linkrobins_blog_posts.user_id', $actorId);
+                });
+            } else {
+                $query->where('linkrobins_blog_posts.is_published', true);
+            }
         }
 
         $params = $context->request ? $context->request->getQueryParams() : [];
+
+        // Optional ?isPublished= filter narrows the listing further. We
+        // accept it for any actor; it intersects with the visibility
+        // rules above, so a non-author still can't see other people's
+        // drafts even if they request isPublished=false.
+        $isPublishedParam = $params['isPublished'] ?? null;
+        if ($isPublishedParam === null && $context instanceof FlarumContext) {
+            $isPublishedParam = $context->internal('isPublished');
+        }
+        if ($isPublishedParam === 'false' || $isPublishedParam === '0' || $isPublishedParam === false) {
+            $query->where('linkrobins_blog_posts.is_published', false);
+        } elseif ($isPublishedParam === 'true' || $isPublishedParam === '1' || $isPublishedParam === true) {
+            $query->where('linkrobins_blog_posts.is_published', true);
+        }
 
         $categoryId = $params['categoryId'] ?? null;
         if ($categoryId === null && $context instanceof FlarumContext) {
@@ -262,8 +294,7 @@ class BlogPostResource extends AbstractDatabaseResource
             Schema\Str::make('coverImageCredit')
                 ->property('cover_image_credit')
                 ->writable()
-                ->nullable()
-                ->maxLength(300),
+                ->nullable(),
 
             Schema\Str::make('visibility')
                 ->writable()
@@ -502,7 +533,13 @@ class BlogPostResource extends AbstractDatabaseResource
     {
         $actor = $context->getActor();
 
-        if (! $model->user_id && ! $actor->isGuest()) {
+        // Force user_id to the acting user. Without this, a non-admin
+        // author could craft a request body with `relationships.user`
+        // pointing at another user and impersonate them on the post.
+        // Admins and moderators legitimately reassigning authorship is
+        // out of scope; if we ever add an "author as someone else" UI
+        // we'll relax this for those roles specifically.
+        if (! $actor->isGuest()) {
             $model->user_id = $actor->id;
         }
 
@@ -521,6 +558,15 @@ class BlogPostResource extends AbstractDatabaseResource
     public function updating(object $model, Context $context): ?object
     {
         $actor = $context->getActor();
+
+        // Same impersonation guard as creating: if the request tried to
+        // change user_id, snap it back to whatever it was before. Eloquent
+        // gives us the pre-modification value via getOriginal().
+        $originalUserId = $model->getOriginal('user_id');
+        $currentUserId  = $model->user_id;
+        if ((int) $currentUserId !== (int) $originalUserId) {
+            $model->user_id = $originalUserId;
+        }
 
         $body = $context->body();
         $rawContent = data_get($body, 'data.attributes.content');

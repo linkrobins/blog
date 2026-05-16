@@ -72,6 +72,33 @@ class BlogServiceProvider extends AbstractServiceProvider
             }
         });
 
+        // Auto-broadcast: when a post transitions to is_published=true AND
+        // its category has newsletter_enabled=true, dispatch the newsletter
+        // job. The job itself checks broadcast_sent_at to prevent
+        // duplicate sends across multiple saves.
+        BlogPost::saved(function (BlogPost $blogPost) {
+            try {
+                if (! $blogPost->wasChanged('is_published')) {
+                    return;
+                }
+                if (! $blogPost->is_published) {
+                    return;
+                }
+                if ($blogPost->broadcast_sent_at) {
+                    return;
+                }
+                $category = $blogPost->category;
+                if (! $category || ! $category->newsletter_enabled) {
+                    return;
+                }
+
+                $dispatcher = resolve(\Illuminate\Contracts\Bus\Dispatcher::class);
+                $dispatcher->dispatch(new \LinkRobins\Blog\Job\SendNewsletter($blogPost->id, false));
+            } catch (\Throwable $e) {
+                error_log('[linkrobins/blog] auto-broadcast failed: ' . $e->getMessage());
+            }
+        });
+
         // When a BlogPost is deleted, delete its comment discussion (and thus
         // cascade-delete its comments via Flarum's own cleanup). We clear
         // blog_post_id first so the `deleting` guard below allows the

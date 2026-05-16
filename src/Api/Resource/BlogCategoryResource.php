@@ -125,6 +125,9 @@ class BlogCategoryResource extends AbstractDatabaseResource
                 }),
             Schema\Integer::make('position')
                 ->writable(),
+            Schema\Boolean::make('newsletterEnabled')
+                ->property('newsletter_enabled')
+                ->writable(),
             Schema\Integer::make('postCount')
                 ->get(fn (BlogCategory $category) => $category->posts()->count()),
             Schema\DateTime::make('createdAt')

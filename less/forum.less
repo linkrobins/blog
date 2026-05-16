@@ -911,3 +911,535 @@ html.LinkRobinsBlogActive {
     }
 }
 
+
+
+// ----- Post editor (ported from admin.less so the editor renders on the forum) -----
+
+.LinkRobinsBlog-editorModal {
+    &.modal-dialog {
+        max-width: 920px;
+    }
+}
+
+.LinkRobinsBlog-editor {
+    .Form-body {
+        --gap: 18px;
+        gap: 18px;
+
+        > * { width: 100%; }
+    }
+
+    &-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        align-items: start;
+        margin-bottom: 0;
+    }
+
+    &-bodyWrapper {
+        // Container for toolbar + textarea — kept flush so they read as one unit
+        display: block;
+        width: 100%;
+    }
+
+    &-bodyGroup {
+        margin-top: 0;
+        margin-bottom: 0;
+    }
+
+    &-optional {
+        font-weight: normal;
+        opacity: 0.6;
+        font-size: 0.85em;
+    }
+
+    &-coverPreview {
+        margin-top: 8px;
+        width: 320px;
+        height: 180px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: rgba(127, 127, 127, 0.08);
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+    }
+
+    &-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px;
+        background: rgba(127, 127, 127, 0.06);
+        padding: 6px 8px;
+        border-radius: 6px 6px 0 0;
+        border: 1px solid rgba(127, 127, 127, 0.18);
+        border-bottom: 0;
+        margin-bottom: 0;
+    }
+
+    &-toolbarBtn {
+        background: transparent;
+        border: 0;
+        width: 32px;
+        height: 32px;
+        border-radius: 4px;
+        cursor: pointer;
+        color: var(--text-color);
+        font-family: inherit;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s ease;
+
+        &:hover:not(:disabled), &:focus:not(:disabled) {
+            background: rgba(127, 127, 127, 0.12);
+        }
+
+        &:disabled { opacity: 0.5; cursor: not-allowed; }
+    }
+
+    &-bodyInput {
+        font-family: ui-monospace, 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+        font-size: 0.95em;
+        line-height: 1.55;
+        border-radius: 0 0 6px 6px;
+        resize: vertical;
+        min-height: 360px;
+        width: 100%;
+        display: block;
+        margin-top: -1px;
+    }
+
+    &-actions {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        margin-top: 20px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(127, 127, 127, 0.12);
+    }
+
+    &-actions-primary {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+
+    &-deleteBtn {
+        color: var(--muted-color);
+
+        &:hover, &:focus {
+            color: var(--alert-error-color, #d9534f);
+            background: transparent;
+        }
+    }
+}
+
+@media (max-width: 700px) {
+    .LinkRobinsBlog-editor-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.LinkRobinsBlog-settings {
+    .Form-body {
+        --gap: 32px;
+        gap: 32px;
+    }
+
+    &-section {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+        padding: 0;
+        margin: 0;
+        border: 0;
+
+        > legend {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text-color);
+            padding: 0 0 8px 0;
+            margin: 0 0 4px 0;
+            border-bottom: 1px solid rgba(127, 127, 127, 0.12);
+            width: 100%;
+        }
+
+        > .Form-group { width: 100%; margin: 0; }
+    }
+
+    // Hero background image field: URL input + upload button on one row,
+    // with a small fixed-size preview below (mirrors the post editor's
+    // cover-image preview so the admin UI stays consistent).
+    &-heroBgInputRow {
+        display: flex;
+        gap: 8px;
+        align-items: stretch;
+
+        input[type="url"] {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+
+    &-heroBgUploadBtn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    &-heroBgPreview {
+        margin-top: 8px;
+        width: 320px;
+        height: 120px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: rgba(127, 127, 127, 0.08);
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+    }
+
+    &-actions {
+        margin-top: 24px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(127, 127, 127, 0.12);
+        display: flex;
+        justify-content: flex-end;
+    }
+}
+
+// Categories tab
+.LinkRobinsBlog-admin-categoriesTable {
+    .LinkRobinsBlog-admin-categoryPosCell {
+        width: 48px;
+        color: var(--muted-color);
+        font-variant-numeric: tabular-nums;
+        font-size: 0.9em;
+    }
+
+    .LinkRobinsBlog-admin-categorySlugCell {
+        font-size: 0.88em;
+        color: var(--muted-color);
+
+        code {
+            background: rgba(127, 127, 127, 0.08);
+            padding: 1px 6px;
+            border-radius: 4px;
+            font-size: 0.92em;
+        }
+    }
+
+    .LinkRobinsBlog-admin-categoryNameCell {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+
+    .LinkRobinsBlog-admin-categorySwatch {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        color: #fff;
+        flex-shrink: 0;
+    }
+
+    .LinkRobinsBlog-admin-categorySwatch-icon {
+        font-size: 12px;
+        opacity: 0.95;
+    }
+
+    .LinkRobinsBlog-admin-categoryName {
+        font-weight: 600;
+    }
+
+    .LinkRobinsBlog-admin-categoryDesc {
+        color: var(--muted-color);
+        font-size: 0.88em;
+        font-weight: normal;
+    }
+}
+
+// Category editor modal
+.LinkRobinsBlog-categoryEditorModal .Modal-body {
+    padding-bottom: 16px;
+}
+
+.LinkRobinsBlog-categoryEditor {
+    &-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+
+        @media (max-width: 600px) {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    &-colorRow,
+    &-iconRow {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    &-colorPicker {
+        width: 42px;
+        height: 38px;
+        padding: 0;
+        border: 1px solid rgba(127, 127, 127, 0.25);
+        border-radius: 6px;
+        background: transparent;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+
+    &-iconPreview {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        border-radius: 6px;
+        background: rgba(127, 127, 127, 0.10);
+        color: var(--text-color);
+        flex-shrink: 0;
+        font-size: 14px;
+    }
+
+    &-actions {
+        margin-top: 24px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(127, 127, 127, 0.12);
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+    }
+}
+
+// Cover image upload UI inside the Post editor
+.LinkRobinsBlog-editor-coverGroup {
+    .LinkRobinsBlog-editor-coverInputRow {
+        display: flex;
+        align-items: stretch;
+        gap: 8px;
+
+        > .FormControl {
+            flex: 1;
+            min-width: 0;
+        }
+    }
+
+    .LinkRobinsBlog-editor-coverUploadBtn {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
+    .LinkRobinsBlog-editor-coverUploadIcon {
+        font-size: 0.9em;
+    }
+}
+
+// Body editor: toolbar separator + upload button + progress
+.LinkRobinsBlog-editor-toolbarSep {
+    display: inline-block;
+    width: 1px;
+    height: 18px;
+    background: rgba(127, 127, 127, 0.25);
+    margin: 0 6px;
+    vertical-align: middle;
+}
+
+.LinkRobinsBlog-editor-toolbarBtn--upload {
+    color: var(--primary-color, currentColor);
+}
+
+.LinkRobinsBlog-editor-bodyUploadStatus {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: rgba(127, 127, 127, 0.08);
+    color: var(--muted-color);
+    border-radius: 6px;
+    font-size: 0.9em;
+}
+
+.LinkRobinsBlog-editor-bodyUploadError {
+    margin-top: 8px;
+}
+
+// Comments toggle in post editor
+.LinkRobinsBlog-editor-commentsToggle {
+    &-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        padding: 10px 0;
+        font-weight: normal;
+
+        input[type="checkbox"] {
+            margin: 0;
+            flex-shrink: 0;
+        }
+    }
+}
+
+.LinkRobinsBlog-editor-newsletter {
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(127, 127, 127, 0.18);
+
+    legend {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+
+    &-actions {
+        margin-top: 10px;
+    }
+}
+
+// Compose button in the blog sidebar. Sits beside the Subscribe star button
+// in the App-primaryControl slot; on mobile both collapse to the FAB.
+.LinkRobinsBlog-composeButton {
+    margin-right: 4px;
+}
+
+// Manage dropdown on the article view (Edit / Delete behind a ...).
+.LinkRobinsBlog-manageMenu {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 5;
+}
+
+.LinkRobinsBlog-post-header {
+    position: relative;  // anchor for the manage menu
+}
+
+// The trigger reuses Flarum's standard Button--more class for visual
+// parity with discussion-post controls. No custom styling needed.
+.LinkRobinsBlog-manageMenu-trigger {
+    // intentionally empty -- keeps the selector available for layout
+    // tweaks if you ever need to override Flarum's defaults here.
+}
+
+.LinkRobinsBlog-manageMenu-popover {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 180px;
+    background: var(--body-bg, #fff);
+    border: 1px solid rgba(127, 127, 127, 0.18);
+    border-radius: 8px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+}
+
+.LinkRobinsBlog-manageMenu-item {
+    background: transparent;
+    border: 0;
+    text-align: left;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 0.92rem;
+    color: var(--text-color);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    &:hover {
+        background: rgba(127, 127, 127, 0.08);
+    }
+
+    &--danger {
+        color: #c22a3a;
+
+        &:hover {
+            background: rgba(220, 53, 69, 0.08);
+        }
+    }
+}
+
+// On smaller screens, anchor the manage menu just below the meta line rather
+// than absolutely positioning it -- the header gets too tight for an absolute
+// menu on mobile.
+@media (max-width: 720px) {
+    .LinkRobinsBlog-manageMenu {
+        position: static;
+        margin-top: 12px;
+    }
+    .LinkRobinsBlog-manageMenu-popover {
+        right: auto;
+        left: 0;
+    }
+}
+
+// Subscribe button as a full-width inline sidebar row (sits below Compose
+// rather than stacking on top of it inside App-primaryControl). Compose
+// keeps the FAB-style primary slot; Subscribe lives in normal sidebar flow.
+.LinkRobinsBlog-subscribeButton-item {
+    margin: 8px 0;
+}
+.LinkRobinsBlog-subscribeButton {
+    width: 100%;
+    text-align: center;
+
+    &.is-subscribed {
+        background: rgba(127, 127, 127, 0.08);
+        color: var(--text-color);
+    }
+}
+
+// Draft badge on blog cards (visible on the Drafts list, and on the main
+// list for moderators / authors-of-their-own-drafts who can see them).
+.LinkRobinsBlog-card-draftBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 8px;
+    padding: 2px 10px;
+    background: rgba(204, 51, 51, 0.1);
+    color: #c33;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+
+    i { font-size: 0.85em; }
+}
+
+.LinkRobinsBlog-card--draft {
+    // Subtle visual reminder that this card is a draft. Dashed border
+    // sits inside the existing card chrome -- not loud, not invisible.
+    outline: 1px dashed rgba(204, 51, 51, 0.35);
+    outline-offset: -1px;
+}
+
+// Drafts grid keeps everything as cards (no featured-post slot). Same
+// layout as the default grid; this selector is here so we can tweak
+// later without touching the main grid.
+.LinkRobinsBlog-grid--drafts {
+    // intentionally empty -- relies on .LinkRobinsBlog-grid defaults
+}
