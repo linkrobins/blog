@@ -1,9 +1,8 @@
 # Link Robins Blog
 
-A Ghost-style blog for Flarum. Standalone post storage, member-only post gating, a clean reading layout, real Flarum discussions for comments, and a built-in newsletter with broadcast over your existing SMTP.
+A Ghost-style blog for Flarum. Standalone post storage, member-only post gating, a clean reading layout, real Flarum discussions for comments, multi-author publishing with proper permissions, and a built-in newsletter with auto-broadcast on publish.
 
 ---
-
 ## Features
 
 ### Reader
@@ -16,7 +15,7 @@ A Ghost-style blog for Flarum. Standalone post storage, member-only post gating,
 
 ### Member-only posts
 
-Posts marked `visibility: members` show the excerpt and a login-wall card to guests. Logged-in users (or only specific groups, configurable) see the full content. Search engines see only the excerpt.
+Posts marked `visibility: members` show the excerpt and a login-wall card to guests. Logged-in users see the full content. Search engines see only the excerpt.
 
 ### Comments are real Flarum discussions
 
@@ -29,49 +28,68 @@ Each blog post gets one normal Flarum discussion behind the scenes. Comments bel
 
 There is no shadow comment system. If you can moderate forum discussions, you can moderate blog comments.
 
+### Multi-author publishing
+
+Two permissions, configured per group in **Admin → Permissions**:
+
+- `linkrobins-blog.start` — can write blog posts and edit/delete their own
+- `linkrobins-blog.moderate` — can edit/delete anyone's blog posts (implies start)
+
+Admins always have both. Authors who only have `.start` see drafts they own; moderators see all drafts.
+
+The blog's sidebar shows a **Compose** button (pen icon) for anyone with permission. The article view shows a `…` menu with Edit and Delete for posts you can manage — same visual as Flarum's discussion-post controls.
+
+### Drafts
+
+`/blog/drafts` lists posts you've saved as draft. Sidebar link to it appears for anyone with `.start`. Authors see their own drafts; moderators and admins see everyone's. Cards on the drafts list have a small "Draft" badge and a dashed outline so they're visually distinct.
+
 ### Newsletter (built in)
 
-- One-click subscribe star button at the top of the blog sidebar (filled star = subscribed, outline = not). Logged-in users only.
-- Admin "Subscribers" tab with live count and CSV export of `email, username, subscribed_at` (RFC-4180 quoted, chunked for large lists)
-- "Send newsletter" button on the post editor — broadcasts via Flarum's configured SMTP to every current subscriber
-- Per-recipient `List-Unsubscribe` header so Gmail/Apple Mail show their built-in unsubscribe button in the inbox
-- Token-based public unsubscribe page — works from any device, no login required
-- `broadcast_sent_at` guard prevents accidental re-sends; explicit "Re-send" requires confirmation
+- **One-click subscribe** star button in the blog sidebar (filled star = subscribed, outline = not). Logged-in users only.
+- **Admin Subscribers tab** with live count and CSV export of `email, username, subscribed_at` (RFC-4180 quoted, chunked for large lists)
+- **Auto-broadcast on publish.** Each category has a "Send newsletter when a post is published in this category" toggle. When a post in such a category transitions to published, the newsletter goes out automatically — no manual button click. Save-as-draft never triggers a send.
+- **Per-recipient `List-Unsubscribe` header** so Gmail and Apple Mail show their built-in unsubscribe button in the inbox.
+- **Confirm-then-unsubscribe** flow on the public unsubscribe page. Defeats email scanners that prefetch links (Office 365, anti-phishing tools) from silently unsubscribing real users.
+- **`broadcast_sent_at` guard** prevents duplicate sends across unpublish/republish cycles.
 
 ### Admin
 
-- Tabs for Posts, Categories, Subscribers, Settings
-- Full WYSIWYG-ish post editor with cover-image upload (fof/upload), excerpt, slug, category, visibility, and comments-enabled toggle
-- Custom HTML widget for arbitrary sidebar content (about blurb, social links, anything)
-- Configurable hero header per blog (text title, forum logo, or custom background image with overlay)
+The admin extension page now focuses on configuration:
+
+- **Categories** — name, slug, color, icon, position, newsletter toggle. One row per setting.
+- **Subscribers** — count + CSV export.
+- **Settings** — blog title and tagline, hero header mode, posts per page, custom sidebar HTML widget, members-only teaser length.
+
+The Posts tab is removed — write and manage posts from `/blog` like everyone else.
 
 ---
 
 ## Installation
 
-```sh
+```
 composer require linkrobins/blog
 php flarum migrate
 php flarum cache:clear
 ```
 
-Then enable the extension from the admin extensions list.
+Enable from **Admin → Extensions**. Then visit **Admin → Permissions** to grant `linkrobins-blog.start` and/or `linkrobins-blog.moderate` to the groups you want to author posts.
 
-### Required Flarum
+### Requirements
 
-Flarum core, recent. If your Flarum is old enough that `Extend\Routes('api')->post(...)` doesn't exist, this won't work; otherwise it should.
+- Flarum 2.x (or later)
+- PHP 8.2+
+- Optional: [`fof/upload`](https://packagist.org/packages/fof/upload) for in-editor image uploads. Without it, you can still set image URLs by hand.
 
 ---
 
 ## Upgrading
 
-This release adds:
+```
+composer update linkrobins/blog
+php flarum migrate
+php flarum cache:clear
+```
 
-- `linkrobins_blog_subscribers` table (newsletter subscribers)
-- `unsubscribe_token` column on subscribers
-- `broadcast_sent_at` column on `linkrobins_blog_posts`
-
-All three are applied by `php flarum migrate` after upgrading. The migrations are additive — no data is dropped or transformed.
 
 ---
 
@@ -80,8 +98,10 @@ All three are applied by `php flarum migrate` after upgrading. The migrations ar
 The extension sends mail via Flarum's configured SMTP. Whether those mails arrive in inboxes vs spam folders depends on your sending domain, not on this code:
 
 - **SPF, DKIM, DMARC** records on your sending domain matter. Without them, Gmail in particular will spam-folder your broadcasts.
-- For lists over ~50 subscribers, set Flarum's queue driver to `database` or `redis`. The default `sync` driver runs the broadcast inline in the admin's HTTP request, which will time out on larger lists.
-- The first time you broadcast, subscribe yourself first and check where the email lands. Mail-tester.com is a free way to grade your sending domain.
+- For lists over ~50 subscribers, set Flarum's queue driver to `database` or `redis`. The default `sync` driver runs the broadcast inline in the publish request, which will time out on larger lists.
+- The first time you enable auto-broadcast on a category, subscribe yourself, publish a test post, and check where the email lands. [mail-tester.com](https://mail-tester.com) is a free way to grade your sending domain.
+
+**Auto-broadcast is one-shot.** Once a post broadcasts, the `broadcast_sent_at` timestamp prevents a second send even if you unpublish and republish. If you need to genuinely re-send for some operational reason (a first send failed mid-way, etc.), it has to be done via tinker or a direct DB tweak — there's no UI button for it any more. This is intentional: a publish click should never silently re-spam a list.
 
 ---
 
@@ -96,6 +116,27 @@ All in **Admin → Extensions → Link Robins Blog → Settings**:
 - Members-only teaser length (characters of body shown to guests)
 - Custom HTML widget content for the blog sidebar
 
+Per-category settings (in the **Categories** tab):
+
+- Name, slug, description
+- Color (used for category tags on cards)
+- Icon (Font Awesome class)
+- Position (sort order)
+- **Send newsletter when published** toggle
+
+---
+
+## Permissions
+
+Two new permissions, granted per-group from **Admin → Permissions**:
+
+| Permission | What it grants |
+|---|---|
+| `linkrobins-blog.start` | Author blog posts. Edit and delete posts they own. See their own drafts at `/blog/drafts`. |
+| `linkrobins-blog.moderate` | Everything `.start` grants, plus edit and delete any post and see all drafts. |
+
+Admins always pass both. Category management, newsletter configuration, and the admin extension page remain admin-only.
+
 ---
 
 ## API
@@ -104,13 +145,16 @@ Mostly JSON:API for posts and categories. A few non-resource endpoints:
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| `GET` | `/api/linkrobins-blog-posts` | List posts. `?isPublished=false` filters to drafts (scope rules apply). |
 | `GET` | `/api/linkrobins-blog/subscription` | Current user's subscription state |
 | `POST` | `/api/linkrobins-blog/subscription` | Subscribe (idempotent) |
 | `DELETE` | `/api/linkrobins-blog/subscription` | Unsubscribe (idempotent) |
 | `GET` | `/api/linkrobins-blog/subscribers` | Admin: `{ count }` |
 | `GET` | `/api/linkrobins-blog/subscribers?format=csv` | Admin: CSV download |
-| `POST` | `/api/linkrobins-blog/posts/{id}/broadcast` | Admin: trigger newsletter send (`?force=1` to re-broadcast) |
-| `GET` | `/linkrobins-blog/unsubscribe/{token}` | Public token-based unsubscribe |
+| `GET` | `/linkrobins-blog/unsubscribe/{token}` | Public confirm page |
+| `GET` | `/linkrobins-blog/unsubscribe/{token}?confirm=1` | Public token-based unsubscribe |
+
+The per-post broadcast endpoint (`POST /api/linkrobins-blog/posts/{id}/broadcast`) was **removed** in 1.0.1. Broadcasts are now triggered by publish-into-category, not by API call.
 
 ---
 
