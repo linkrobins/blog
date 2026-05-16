@@ -6,7 +6,6 @@ use Flarum\Extend;
 use Flarum\Search\Database\DatabaseSearchDriver;
 use Flarum\User\User;
 use LinkRobins\Blog\Access;
-use LinkRobins\Blog\Api\Controller\BroadcastPostController;
 use LinkRobins\Blog\Api\Controller\CreateSubscriptionController;
 use LinkRobins\Blog\Api\Controller\DeleteSubscriptionController;
 use LinkRobins\Blog\Api\Controller\ListSubscribersController;
@@ -105,8 +104,7 @@ return [
         ->get('/linkrobins-blog/subscription',          'linkrobins-blog.subscription.show',   ShowSubscriptionController::class)
         ->post('/linkrobins-blog/subscription',         'linkrobins-blog.subscription.create', CreateSubscriptionController::class)
         ->delete('/linkrobins-blog/subscription',       'linkrobins-blog.subscription.delete', DeleteSubscriptionController::class)
-        ->get('/linkrobins-blog/subscribers',           'linkrobins-blog.subscribers.list',    ListSubscribersController::class)
-        ->post('/linkrobins-blog/posts/{id}/broadcast', 'linkrobins-blog.posts.broadcast',     BroadcastPostController::class),
+        ->get('/linkrobins-blog/subscribers',           'linkrobins-blog.subscribers.list',    ListSubscribersController::class),
 
     (new Extend\View())
         ->namespace('linkrobins-blog', __DIR__ . '/views'),
@@ -133,6 +131,34 @@ return [
                             error_log('[linkrobins/blog] linkrobinsBlogSubscribed lookup failed: '
                                 . $e->getMessage());
                         }
+                        return false;
+                    }
+                }),
+
+            \Flarum\Api\Schema\Boolean::make('canCreateBlogPost')
+                ->get(function ($model, \Flarum\Api\Context $context) {
+                    $actor = $context->getActor();
+                    if ($actor->isGuest()) {
+                        return false;
+                    }
+                    try {
+                        return $actor->can('createBlogPost');
+                    } catch (\Throwable $e) {
+                        error_log('[linkrobins/blog] canCreateBlogPost probe failed: ' . $e->getMessage());
+                        return false;
+                    }
+                }),
+
+            \Flarum\Api\Schema\Boolean::make('canModerateBlogPosts')
+                ->get(function ($model, \Flarum\Api\Context $context) {
+                    $actor = $context->getActor();
+                    if ($actor->isGuest()) {
+                        return false;
+                    }
+                    try {
+                        return $actor->can('moderateBlogPosts');
+                    } catch (\Throwable $e) {
+                        error_log('[linkrobins/blog] canModerateBlogPosts probe failed: ' . $e->getMessage());
                         return false;
                     }
                 }),
