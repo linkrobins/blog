@@ -40,6 +40,16 @@ html.LinkRobinsBlogActive {
         padding: 56px 0 72px;
     }
 
+    // Image-only mode: no title, no tagline, no inner container. Padding
+    // collapses (there's no text to flank), but we set a minimum height so
+    // the background image is actually visible rather than collapsing to
+    // zero. Authors who want a tall banner should pick an appropriately
+    // sized image.
+    &--imageOnly {
+        padding: 0;
+        min-height: clamp(180px, 28vw, 360px);
+    }
+
     &--withBg .LinkRobinsBlog-hero-title,
     &--withBg .LinkRobinsBlog-hero-tagline,
     &--withBg .LinkRobinsBlog-hero-brand {
@@ -441,6 +451,24 @@ html.LinkRobinsBlogActive {
             border-radius: 12px;
             max-height: 720px;
             object-fit: cover;
+        }
+    }
+
+    .LinkRobinsBlog-post-coverCredit {
+        font-size: 0.85rem;
+        color: var(--muted-color);
+        margin-top: 8px;
+        padding: 0 4px;
+        line-height: 1.4;
+
+        a {
+            color: inherit;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+
+            &:hover, &:focus {
+                color: var(--text-color);
+            }
         }
     }
 
@@ -1252,6 +1280,13 @@ html.LinkRobinsBlogActive {
     .LinkRobinsBlog-editor-coverUploadIcon {
         font-size: 0.9em;
     }
+}
+
+// Credit URL label sits inside the credit-group below the help text of the
+// credit textarea; give it some breathing room so it doesn't visually merge.
+.LinkRobinsBlog-editor-coverCreditUrlLabel {
+    display: block;
+    margin-top: 14px;
 }
 
 // Body editor: toolbar separator + upload button + progress

@@ -294,7 +294,37 @@ class BlogPostResource extends AbstractDatabaseResource
             Schema\Str::make('coverImageCredit')
                 ->property('cover_image_credit')
                 ->writable()
-                ->nullable(),
+                ->nullable()
+                ->maxLength(300),
+
+            Schema\Str::make('coverImageCreditUrl')
+                ->property('cover_image_credit_url')
+                ->writable()
+                ->nullable()
+                ->maxLength(500)
+                // Reject anything that isn't an http(s) URL. The value gets
+                // interpolated into <a href> on the article view, so a
+                // javascript: or data: URL would be a script-execution
+                // primitive. Empty/null is allowed (= no link). We're
+                // permissive about the rest of the URL shape -- we just
+                // care about the scheme.
+                ->set(function (BlogPost $post, ?string $value) {
+                    if ($value === null) {
+                        $post->cover_image_credit_url = null;
+                        return;
+                    }
+                    $trimmed = trim($value);
+                    if ($trimmed === '') {
+                        $post->cover_image_credit_url = null;
+                        return;
+                    }
+                    if (! preg_match('#^https?://#i', $trimmed)) {
+                        error_log('[linkrobins/blog] rejected non-http credit URL: '
+                            . substr($trimmed, 0, 80));
+                        return;
+                    }
+                    $post->cover_image_credit_url = $trimmed;
+                }),
 
             Schema\Str::make('visibility')
                 ->writable()

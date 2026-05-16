@@ -66,11 +66,19 @@ class ListSubscribersController implements RequestHandlerInterface
             });
 
         // RFC-4180 CSV quoting: wrap any cell with quote/comma/CR/LF in
-        // double quotes, double up internal quotes.
+        // double quotes, double up internal quotes. Cells starting with
+        // a formula-trigger character (=, +, -, @, tab, CR) also get a
+        // leading single-quote prefix to neutralise Excel/Sheets formula
+        // injection on open. Usernames are constrained to [a-z0-9_-]+ by
+        // Flarum so they can't trigger this in practice; emails CAN start
+        // with + (e.g. RFC-valid `+tag@example.com`) so we cover them too.
         $lines = [];
         foreach ($rows as $row) {
             $escaped = array_map(function ($cell) {
                 $cell = (string) $cell;
+                if ($cell !== '' && in_array($cell[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+                    $cell = "'" . $cell;
+                }
                 if (preg_match('/[",\r\n]/', $cell)) {
                     return '"' . str_replace('"', '""', $cell) . '"';
                 }

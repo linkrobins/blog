@@ -17,6 +17,7 @@ use LinkRobins\Blog\BlogPost;
 use LinkRobins\Blog\BlogServiceProvider;
 use LinkRobins\Blog\BlogSubscriber;
 use LinkRobins\Blog\Content\BlogCategoryShow;
+use LinkRobins\Blog\Content\BlogDrafts;
 use LinkRobins\Blog\Content\BlogIndex;
 use LinkRobins\Blog\Content\BlogPostShow;
 use LinkRobins\Blog\Content\Unsubscribe;
@@ -27,6 +28,7 @@ return [
         ->js(__DIR__ . '/js/forum.js')
         ->css(__DIR__ . '/less/forum.less')
         ->route('/blog',                                'linkrobins-blog.index',       BlogIndex::class)
+        ->route('/blog/drafts',                         'linkrobins-blog.drafts',      BlogDrafts::class)
         ->route('/category/{slug}',                     'linkrobins-blog.category',    BlogCategoryShow::class)
         ->route('/article/{slug}',                      'linkrobins-blog.post',        BlogPostShow::class)
         ->route('/linkrobins-blog/unsubscribe/{token}', 'linkrobins-blog.unsubscribe', Unsubscribe::class),

@@ -2,6 +2,19 @@
 
 (function () {
 
+    // Short helper for translator lookups. Returns the translated string, or
+    // the key itself if no translation is registered (Flarum's default
+    // fallback behaviour). All forum-side strings live under
+    // 'linkrobins-blog.forum.*' or 'linkrobins-blog.ref.*'. Named tr() so
+    // it doesn't shadow existing local 't' variables in this file.
+    function tr(key, params) {
+        try {
+            return app.translator.trans('linkrobins-blog.' + key, params || {});
+        } catch (e) {
+            return key;
+        }
+    }
+
     function readForumAttribute(key) {
         try {
             var fa = app.data && app.data.resources;
@@ -24,7 +37,7 @@
     function siteTitle() {
         var t = readForumAttribute('linkrobinsBlogTitle');
         if (typeof t === 'string' && t.trim() !== '') return t.trim();
-        return readForumAttribute('title') || 'Blog';
+        return readForumAttribute('title') || tr('ref.blog');
     }
 
     function siteTagline() {
@@ -42,7 +55,7 @@
     function navLabel() {
         var v = readForumAttribute('linkrobinsBlogNavLabel');
         if (typeof v === 'string' && v.trim() !== '') return v.trim();
-        return 'Blog';
+        return tr('ref.blog');
     }
 
     function navIcon() {
@@ -281,9 +294,9 @@
                 console.error('[linkrobins/blog] subscribe failed:', err);
                 _newsletterSetState({
                     busy: false,
-                    error: 'Could not subscribe. Please try again.',
+                    error: tr('forum.subscribe.subscribe_failed'),
                 });
-                try { alert('Could not subscribe. Please try again.'); } catch (e) {}
+                try { alert(tr('forum.subscribe.subscribe_failed')); } catch (e) {}
             });
     }
 
@@ -301,9 +314,9 @@
                 console.error('[linkrobins/blog] unsubscribe failed:', err);
                 _newsletterSetState({
                     busy: false,
-                    error: 'Could not unsubscribe. Please try again.',
+                    error: tr('forum.subscribe.unsubscribe_failed'),
                 });
-                try { alert('Could not unsubscribe. Please try again.'); } catch (e) {}
+                try { alert(tr('forum.subscribe.unsubscribe_failed')); } catch (e) {}
             });
     }
 
@@ -412,7 +425,7 @@
     }
 
     function uploadFofFile(file, cb) {
-        if (!file) { cb(null, 'No file.'); return; }
+        if (!file) { cb(null, tr('forum.edit_post.upload_no_file')); return; }
         var body = new FormData();
         body.append('files[]', file);
         app.request({
@@ -426,16 +439,16 @@
             var uploaded = (data && data[0]) || null;
             var url = uploaded && uploaded.attributes && uploaded.attributes.url;
             if (url) cb(url, null);
-            else cb(null, 'Upload succeeded but no URL returned.');
+            else cb(null, tr('forum.edit_post.upload_no_url'));
         })
         .catch(function (err) {
             console.error('[linkrobins/blog] upload failed:', err);
-            var msg = 'Upload failed.';
+            var msg = tr('forum.edit_post.upload_failed');
             if (err && err.response && err.response.errors && err.response.errors[0]) {
                 var e = err.response.errors[0];
                 msg = e.detail || e.title || msg;
             } else if (err && err.status === 404) {
-                msg = 'Upload endpoint not found. Is fof/upload installed and enabled?';
+                msg = tr('forum.edit_post.upload_endpoint_missing_short');
             }
             cb(null, msg);
         });
@@ -632,7 +645,7 @@
         // blog view is mounted (or none -- e.g. deletion of a post while
         // on /some-other-page).
         if (ev.type === 'delete') {
-            showBlogAlert('success', 'Post deleted.');
+            showBlogAlert('success', tr('forum.post.delete_success'));
         } else if (ev.type === 'save') {
             // Saves are usually followed by the modal closing on a
             // visible blog list/article -- no toast needed, the UI
@@ -645,7 +658,7 @@
     // save or delete -- pages typically use this to refresh their data.
     function openPostEditor(post, onSaved) {
         if (!window.LinkRobinsBlogPostEditorModal) {
-            try { alert('Post editor is not available.'); } catch (e) {}
+            try { alert(tr('forum.edit_post.editor_not_available')); } catch (e) {}
             return;
         }
         loadCategoriesForEditor(function (categories) {
@@ -729,14 +742,55 @@
 
             if (IndexSidebar && LinkButton && typeof extend === 'function') {
                 extend(IndexSidebar.prototype, 'navItems', function (items) {
-                    var bp       = basePath();
-                    var priority = isBlogHomepage() ? 110 : 50;
-                    var href     = isBlogHomepage() ? (bp + '/') : (bp + blogIndexRoute());
-                    items.add(
-                        'linkrobins-blog',
-                        m(LinkButton, { href: href, icon: navIcon() }, navLabel()),
-                        priority
-                    );
+                    // Skip when the current page is itself a blog page. The
+                    // BlogIndexSidebar subclass calls super.navItems(), which
+                    // routes through this wrapper -- adding our own "Blog"
+                    // link there would duplicate the BlogIndexSidebar's own
+                    // "All Posts" link. The wrapper is only useful from the
+                    // *forum* IndexSidebar (e.g. when reading /all), where it
+                    // gives users a shortcut over to the blog.
+                    try {
+                        var routeName = app.current && typeof app.current.get === 'function'
+                            ? app.current.get('routeName')
+                            : null;
+                        if (typeof routeName === 'string' && routeName.indexOf('linkrobins-blog') === 0) {
+                            return;
+                        }
+                    } catch (e) {}
+
+                    // Whichever entry is the configured homepage takes the
+                    // top slot in the SelectDropdown, on EVERY page. So:
+                    //   - blog homepage: Blog at 100, demote allDiscussions to 90
+                    //   - all-discussions homepage: Blog at 90, leave allDiscussions at 100
+                    // This produces a stable nav: the user's chosen "home"
+                    // is always first regardless of what they're currently
+                    // viewing, matching how Flarum's defaultRoute is meant
+                    // to be the primary destination.
+                    var bp        = basePath();
+                    var blogHome  = isBlogHomepage();
+                    var href      = blogHome ? (bp + '/') : (bp + blogIndexRoute());
+
+                    if (blogHome) {
+                        items.add('linkrobins-blog',
+                            m(LinkButton, { href: href, icon: navIcon() }, navLabel()),
+                            100
+                        );
+                        // Push the core allDiscussions entry down a notch so
+                        // the homepage (Blog) reads first. setPriority is a
+                        // no-op if the key isn't present, but we guard
+                        // anyway for old/future ItemList shapes.
+                        try {
+                            if (typeof items.has === 'function' && items.has('allDiscussions')
+                                && typeof items.setPriority === 'function') {
+                                items.setPriority('allDiscussions', 90);
+                            }
+                        } catch (e) {}
+                    } else {
+                        items.add('linkrobins-blog',
+                            m(LinkButton, { href: href, icon: navIcon() }, navLabel()),
+                            90
+                        );
+                    }
                 });
             }
         } catch (e) {
@@ -762,7 +816,8 @@
                 this.slug        = attr.slug        || '';
                 this.excerpt     = attr.excerpt     || '';
                 this.cover       = attr.coverImageUrl || '';
-                this.coverCredit = attr.coverImageCredit || '';
+                this.coverCredit    = attr.coverImageCredit    || '';
+                this.coverCreditUrl = attr.coverImageCreditUrl || '';
                 this.bodyText    = attr.content     || '';
                 this.visibility  = attr.visibility  || 'public';
                 this.categoryId  = cat ? cat.id : '';
@@ -781,13 +836,13 @@
             }
 
             className()  { return 'Modal--large LinkRobinsBlog-editorModal'; }
-            title()      { return this.editId ? 'Edit post' : 'New post'; }
+            title()      { return this.editId ? tr('forum.edit_post.title_edit') : tr('forum.edit_post.title_create'); }
 
             content() {
                 var self = this;
                 return m('div', { className: 'Modal-body LinkRobinsBlog-editor' }, [
                     self.error ? m('div', { className: 'Alert Alert--danger' }, [
-                        m('span', { className: 'Alert-body' }, 'Could not save: ' + self._errorMessage()),
+                        m('span', { className: 'Alert-body' }, tr('forum.edit_post.save_failed', { detail: self._errorMessage() })),
                     ]) : null,
                     m('div', { className: 'Form-body' }, [
                         self._renderTitleAndSlug(),
@@ -805,27 +860,27 @@
 
             _errorMessage() {
                 var err = this.error;
-                if (!err) return 'unknown error';
+                if (!err) return tr('forum.edit_post.unknown_error');
                 try {
                     var errors = err.response && err.response.errors;
                     if (errors && errors[0]) {
                         var src = errors[0].source && (errors[0].source.pointer || errors[0].source.parameter);
-                        return (errors[0].detail || errors[0].title || 'error') + (src ? ' (' + src + ')' : '');
+                        return (errors[0].detail || errors[0].title || tr('forum.edit_post.error_label')) + (src ? ' (' + src + ')' : '');
                     }
                 } catch (e) {}
-                return (err.message || err.statusText || 'unknown error');
+                return (err.message || err.statusText || tr('forum.edit_post.unknown_error'));
             }
 
             _renderTitleAndSlug() {
                 var self = this;
                 return m('div', { className: 'Form-group' }, [
-                    m('label', null, 'Title'),
+                    m('label', null, tr('forum.edit_post.title_label')),
                     m('input', {
                         type:       'text',
                         className:  'FormControl',
                         value:      self.titleText,
                         disabled:   self.saving,
-                        placeholder: 'e.g. Why I built this',
+                        placeholder: tr('forum.edit_post.title_placeholder'),
                         oninput:    function (e) {
                             self.titleText = e.target.value;
                             if (!self.editId) {
@@ -839,13 +894,13 @@
             _renderExcerpt() {
                 var self = this;
                 return m('div', { className: 'Form-group' }, [
-                    m('label', null, 'Excerpt ', m('span', { className: 'LinkRobinsBlog-editor-optional' }, '(optional)')),
+                    m('label', null, tr('forum.edit_post.excerpt_label') + ' ', m('span', { className: 'LinkRobinsBlog-editor-optional' }, tr('forum.edit_post.excerpt_optional'))),
                     m('textarea', {
                         className:  'FormControl',
                         value:      self.excerpt,
                         disabled:   self.saving,
                         rows:       2,
-                        placeholder: 'Optional summary for cards. If empty, the first paragraph of the body is used.',
+                        placeholder: tr('forum.edit_post.excerpt_placeholder'),
                         oninput:    function (e) { self.excerpt = e.target.value; },
                     }),
                 ]);
@@ -855,14 +910,14 @@
                 var self = this;
                 var hasFofUpload = isFofUploadInstalled();
                 return m('div', { className: 'Form-group LinkRobinsBlog-editor-coverGroup' }, [
-                    m('label', null, 'Cover image'),
+                    m('label', null, tr('forum.edit_post.cover_label')),
                     m('div', { className: 'LinkRobinsBlog-editor-coverInputRow' }, [
                         m('input', {
                             type:        'text',
                             className:   'FormControl',
                             value:       self.cover,
                             disabled:    self.saving || self.coverUploading,
-                            placeholder: 'https://example.com/image.jpg',
+                            placeholder: tr('forum.edit_post.cover_url_placeholder'),
                             oninput:     function (e) { self.cover = e.target.value; },
                         }),
                         hasFofUpload ? m('button', {
@@ -875,7 +930,7 @@
                                 ? m('i', { className: 'fas fa-spinner fa-spin LinkRobinsBlog-editor-coverUploadIcon' })
                                 : m('i', { className: 'fas fa-upload LinkRobinsBlog-editor-coverUploadIcon' }),
                             ' ',
-                            self.coverUploading ? 'Uploading…' : 'Upload',
+                            self.coverUploading ? tr('forum.edit_post.cover_uploading') : tr('forum.edit_post.cover_upload_button'),
                         ]) : null,
                         // Hidden file input the Upload button triggers.
                         hasFofUpload ? m('input', {
@@ -891,7 +946,7 @@
                         }) : null,
                     ]),
                     !hasFofUpload ? m('div', { className: 'helpText' },
-                        'Paste a URL above. Install fof/upload to get a direct upload button.'
+                        tr('forum.edit_post.cover_url_help')
                     ) : null,
                     self.coverUploadError ? m('div', { className: 'Alert Alert--danger', style: 'margin-top:8px' },
                         m('span', { className: 'Alert-body' }, self.coverUploadError)
@@ -900,17 +955,31 @@
                         m('img', { src: self.cover, alt: '', onerror: function (e) { e.target.style.display = 'none'; } })
                     ) : null,
                     m('div', { className: 'Form-group LinkRobinsBlog-editor-coverCreditGroup' }, [
-                        m('label', null, 'Image credit (optional)'),
+                        m('label', null, tr('forum.edit_post.cover_credit_label')),
                         m('textarea', {
                             className:   'FormControl',
                             rows:        2,
                             value:       self.coverCredit || '',
                             disabled:    self.saving,
-                            placeholder: 'Photo by Jane Doe on Unsplash',
+                            placeholder: tr('forum.edit_post.cover_credit_placeholder'),
                             oninput:     function (e) { self.coverCredit = e.target.value; },
                         }),
                         m('div', { className: 'helpText' },
-                            'Shown as a small caption under the cover image.'
+                            tr('forum.edit_post.cover_credit_help')
+                        ),
+                        m('label', { className: 'LinkRobinsBlog-editor-coverCreditUrlLabel' },
+                            tr('forum.edit_post.cover_credit_url_label')
+                        ),
+                        m('input', {
+                            type:        'url',
+                            className:   'FormControl',
+                            value:       self.coverCreditUrl || '',
+                            disabled:    self.saving,
+                            placeholder: tr('forum.edit_post.cover_credit_url_placeholder'),
+                            oninput:     function (e) { self.coverCreditUrl = e.target.value; },
+                        }),
+                        m('div', { className: 'helpText' },
+                            tr('forum.edit_post.cover_credit_url_help')
                         ),
                     ]),
                 ]);
@@ -944,19 +1013,19 @@
                     if (url) {
                         self.cover = url;
                     } else {
-                        self.coverUploadError = 'Upload succeeded but no URL was returned.';
+                        self.coverUploadError = tr('forum.edit_post.upload_no_url');
                     }
                     m.redraw();
                 })
                 .catch(function (err) {
                     self.coverUploading = false;
                     console.error('[linkrobins/blog] cover upload failed:', err);
-                    var msg = 'Upload failed.';
+                    var msg = tr('forum.edit_post.upload_failed');
                     if (err && err.response && err.response.errors && err.response.errors[0]) {
                         var e = err.response.errors[0];
                         msg = (e.detail || e.title || msg);
                     } else if (err && err.status === 404) {
-                        msg = 'Upload endpoint not found. Is the fof/upload extension installed and enabled?';
+                        msg = tr('forum.edit_post.upload_endpoint_missing');
                     }
                     self.coverUploadError = msg;
                     m.redraw();
@@ -967,33 +1036,33 @@
                 var self = this;
                 return m('div', { className: 'LinkRobinsBlog-editor-row' }, [
                     m('div', { className: 'Form-group' }, [
-                        m('label', null, 'Category'),
+                        m('label', null, tr('forum.edit_post.category_label')),
                         m('select', {
                             className: 'FormControl',
                             value:     self.categoryId,
                             disabled:  self.saving,
                             onchange:  function (e) { self.categoryId = e.target.value; },
                         }, [
-                            m('option', { value: '' }, '— Uncategorized —'),
+                            m('option', { value: '' }, tr('forum.edit_post.category_none')),
                             (self.attrs.categories || []).map(function (cat) {
                                 return m('option', { value: cat.id, key: 'c-' + cat.id }, cat.attributes.name);
                             }),
                         ]),
                     ]),
                     m('div', { className: 'Form-group' }, [
-                        m('label', null, 'Visibility'),
+                        m('label', null, tr('forum.edit_post.visibility_label')),
                         m('select', {
                             className: 'FormControl',
                             value:     self.visibility,
                             disabled:  self.saving,
                             onchange:  function (e) { self.visibility = e.target.value; },
                         }, [
-                            m('option', { value: 'public' }, 'Public — anyone can read'),
-                            m('option', { value: 'members' }, 'Members only — login required'),
+                            m('option', { value: 'public' }, tr('forum.edit_post.visibility_public')),
+                            m('option', { value: 'members' }, tr('forum.edit_post.visibility_members')),
                         ]),
                     ]),
                     m('div', { className: 'Form-group LinkRobinsBlog-editor-commentsToggle' }, [
-                        m('label', null, 'Comments'),
+                        m('label', null, tr('forum.edit_post.comments_label')),
                         m('label', { className: 'LinkRobinsBlog-editor-commentsToggle-row' }, [
                             m('input', {
                                 type:     'checkbox',
@@ -1001,7 +1070,7 @@
                                 disabled: self.saving,
                                 onchange: function (e) { self.commentsEnabled = !!e.target.checked; },
                             }),
-                            m('span', null, ' Allow comments on this post'),
+                            m('span', null, ' ' + tr('forum.edit_post.comments_toggle')),
                         ]),
                     ]),
                 ]);
@@ -1054,7 +1123,7 @@
                     children.push(m('button', {
                         type:      'button',
                         className: 'LinkRobinsBlog-editor-toolbarBtn LinkRobinsBlog-editor-toolbarBtn--upload',
-                        title:     'Upload image(s)',
+                        title:     tr('forum.edit_post.toolbar_image_title'),
                         disabled:  self.saving || self.bodyUploading,
                         onclick:   function () { self._pickBodyFiles(); },
                     }, [
@@ -1077,7 +1146,7 @@
                         value:      self.bodyText,
                         disabled:   self.saving,
                         rows:       16,
-                        placeholder: 'Write in markdown. **bold**, *italic*, [links](https://...), and so on.',
+                        placeholder: tr('forum.edit_post.body_placeholder'),
                         oninput:    function (e) { self.bodyText = e.target.value; },
                     }),
                     hasFofUpload ? m('input', {
@@ -1094,7 +1163,7 @@
                     }) : null,
                     self.bodyUploading ? m('div', { className: 'LinkRobinsBlog-editor-bodyUploadStatus' }, [
                         m('i', { className: 'fas fa-spinner fa-spin' }),
-                        ' Uploading ' + (self.bodyUploadIndex || 0) + ' of ' + (self.bodyUploadTotal || 0) + '…',
+                        ' ' + tr('forum.edit_post.body_upload_status', { index: self.bodyUploadIndex || 0, total: self.bodyUploadTotal || 0 }),
                     ]) : null,
                     self.bodyUploadError ? m('div', { className: 'Alert Alert--danger LinkRobinsBlog-editor-bodyUploadError' },
                         m('span', { className: 'Alert-body' }, self.bodyUploadError)
@@ -1164,12 +1233,12 @@
                     })
                     .catch(function (err) {
                         console.error('[linkrobins/blog] body upload failed:', err);
-                        var msg = 'Upload failed.';
+                        var msg = tr('forum.edit_post.upload_failed');
                         if (err && err.response && err.response.errors && err.response.errors[0]) {
                             var e = err.response.errors[0];
                             msg = e.detail || e.title || msg;
                         } else if (err && err.status === 404) {
-                            msg = 'Upload endpoint not found. Is the fof/upload extension installed and enabled?';
+                            msg = tr('forum.edit_post.upload_endpoint_missing');
                         }
                         self.bodyUploading   = false;
                         self.bodyUploadError = msg + ' (' + (file.name || 'file') + ')';
@@ -1196,22 +1265,22 @@
                             disabled:  !canSave,
                             onclick:   function () { self._save(true); },
                         }, self.saving
-                            ? 'Saving…'
+                            ? tr('forum.edit_post.saving')
                             : (self.editId
-                                ? (self.isPublished ? 'Update' : 'Publish')
-                                : 'Publish')),
+                                ? (self.isPublished ? tr('forum.edit_post.update_button') : tr('forum.edit_post.publish_button'))
+                                : tr('forum.edit_post.publish_button'))),
                         m('button', {
                             type:      'button',
                             className: 'Button',
                             disabled:  !canSave,
                             onclick:   function () { self._save(false); },
-                        }, self.saving ? 'Saving…' : 'Save as draft'),
+                        }, self.saving ? tr('forum.edit_post.saving') : tr('forum.edit_post.save_draft_button')),
                         m('button', {
                             type:      'button',
                             className: 'Button Button--text',
                             disabled:  self.saving,
                             onclick:   function () { self.hide(); },
-                        }, 'Cancel'),
+                        }, tr('forum.edit_post.cancel_button')),
                     ]),
                 ];
 
@@ -1222,7 +1291,7 @@
                             className: 'Button Button--text LinkRobinsBlog-editor-deleteBtn',
                             disabled:  self.saving,
                             onclick:   function () {
-                                if (!window.confirm('Delete this post? This cannot be undone.')) return;
+                                if (!window.confirm(tr('forum.post.delete_confirm'))) return;
                                 self.saving = true;
                                 self.error  = null;
                                 m.redraw();
@@ -1245,7 +1314,7 @@
                                     m.redraw();
                                 });
                             },
-                        }, 'Delete Post')
+                        }, tr('forum.edit_post.delete_button'))
                     );
                 }
 
@@ -1259,15 +1328,16 @@
                 m.redraw();
 
                 var attributes = {
-                    title:            self.titleText.trim(),
-                    slug:             self.slug.trim() || slugify(self.titleText),
-                    excerpt:          self.excerpt || '',
-                    content:          self.bodyText,
-                    coverImageUrl:    self.cover || null,
-                    coverImageCredit: (self.coverCredit && self.coverCredit.trim()) || null,
-                    visibility:       self.visibility,
-                    isPublished:      publishFlag,
-                    commentsEnabled:  self.commentsEnabled !== false,
+                    title:               self.titleText.trim(),
+                    slug:                self.slug.trim() || slugify(self.titleText),
+                    excerpt:             self.excerpt || '',
+                    content:             self.bodyText,
+                    coverImageUrl:       self.cover || null,
+                    coverImageCredit:    (self.coverCredit && self.coverCredit.trim()) || null,
+                    coverImageCreditUrl: (self.coverCreditUrl && self.coverCreditUrl.trim()) || null,
+                    visibility:          self.visibility,
+                    isPublished:         publishFlag,
+                    commentsEnabled:     self.commentsEnabled !== false,
                 };
                 if (publishFlag && !self.editId) {
                     attributes.publishedAt = new Date().toISOString();
@@ -1322,8 +1392,8 @@
                             icon:          'fas fa-pen',
                             className:     'Button Button--primary LinkRobinsBlog-composeButton',
                             itemClassName: 'App-primaryControl',
-                            'aria-label':  'New post',
-                            title:         'New post',
+                            'aria-label':  tr('forum.index.compose_button'),
+                            title:         tr('forum.edit_post.title_create'),
                             onclick:       function () {
                                 openPostEditor(null, function () {
                                     // broadcastBlogRefresh already redraws;
@@ -1333,7 +1403,7 @@
                                     invalidateCategoriesCache();
                                 });
                             },
-                        }, 'Compose'),
+                        }, tr('forum.index.compose_button')),
                         110
                     );
                 }
@@ -1348,24 +1418,24 @@
                     var icon, label, onclick, extraClass;
                     if (!loggedIn) {
                         icon       = 'far fa-star';
-                        label      = 'Subscribe';
+                        label      = tr('forum.subscribe.subscribe_button');
                         extraClass = '';
                         onclick    = openLogIn;
                     } else if (isSub) {
                         icon       = 'fas fa-star';
-                        label      = busy ? 'Working\u2026' : 'Subscribed';
+                        label      = busy ? tr('forum.subscribe.working_busy') : tr('forum.subscribe.subscribed_button');
                         extraClass = ' is-subscribed';
                         onclick    = function () {
                             if (_newsletter.busy) return;
                             var ok = false;
                             try {
-                                ok = window.confirm('Unsubscribe from the newsletter?');
+                                ok = window.confirm(tr('forum.subscribe.unsubscribe_confirm'));
                             } catch (e) { ok = true; }
                             if (ok) _newsletterUnsubscribe();
                         };
                     } else {
                         icon       = 'far fa-star';
-                        label      = busy ? 'Subscribing\u2026' : 'Subscribe';
+                        label      = busy ? tr('forum.subscribe.subscribing_busy') : tr('forum.subscribe.subscribe_button');
                         extraClass = '';
                         onclick    = _newsletterSubscribe;
                     }
@@ -1408,10 +1478,44 @@
             }
 
             navItems() {
-                var ItemListCtor = null;
-                try { ItemListCtor = flarum.reg.get('core', 'common/utils/ItemList'); } catch (e) {}
-                var items = ItemListCtor ? new ItemListCtor() : null;
+                // Start from the parent IndexSidebar's nav items list, which
+                // gives us "All Discussions" plus whatever other extensions
+                // contribute via extend(IndexSidebar.prototype, 'navItems').
+                //
+                // We then layer the blog's own items on top:
+                //   - "All Posts" at the top
+                //   - "Drafts" for authoring users
+                //   - "Categories" section at the bottom
+                //
+                // Two cleanups happen here:
+                //   1. flarum/tags adds a "Tags" link AND a long per-tag link
+                //      list. We keep the "Tags" link (lets readers jump to
+                //      /tags), but we set noTagsList=true in oninit so the
+                //      tags extension skips the per-tag list. We also strip
+                //      its orphan separator if it slipped through.
+                //   2. Nothing else needs stripping here -- the redundant
+                //      forum-side "Blog" link is suppressed at its source
+                //      (the extend() wrapper above opts out on blog pages).
+                var items;
+                try {
+                    items = super.navItems();
+                } catch (e) {
+                    console.warn('[linkrobins/blog] super.navItems() threw, falling back to empty:', e);
+                    var ItemListCtor0 = null;
+                    try { ItemListCtor0 = flarum.reg.get('core', 'common/utils/ItemList'); } catch (e2) {}
+                    items = ItemListCtor0 ? new ItemListCtor0() : null;
+                }
                 if (!items || !LinkButton) return items;
+
+                // Defense in depth: if noTagsList didn't take effect for some
+                // reason, still strip the orphan separator the tags extension
+                // would emit just before its (now-absent) tag list.
+                try {
+                    if (typeof items.has === 'function' && items.has('separator')
+                        && typeof items.remove === 'function') {
+                        items.remove('separator');
+                    }
+                } catch (e) {}
 
                 var bp         = basePath();
                 var blogHome   = isBlogHomepage();
@@ -1421,52 +1525,68 @@
                 var onDrafts   = isDraftsRoute();
                 var allActive  = !activeSlug && !isPostView && !onDrafts;
 
+                // Homepage entry goes first on every page (matches the
+                // ordering in the forum-side IndexSidebar). When blog is
+                // the homepage, "All Posts" is at 100 and we push the
+                // inherited "All Discussions" down to 90. When all-
+                // discussions is the homepage, "All Posts" is at 90 and
+                // the inherited "All Discussions" stays at its default 100.
+                var allPostsPriority = blogHome ? 100 : 90;
                 items.add(
                     'allPosts',
                     m(LinkButton, {
                         href:   allHref,
                         icon:   navIcon(),
                         active: allActive,
-                    }, navLabel() || 'All posts'),
-                    100
+                    }, navLabel() || tr('forum.sidebar.all_posts')),
+                    allPostsPriority
                 );
+                if (blogHome) {
+                    try {
+                        if (typeof items.has === 'function' && items.has('allDiscussions')
+                            && typeof items.setPriority === 'function') {
+                            items.setPriority('allDiscussions', 90);
+                        }
+                    } catch (e) {}
+                }
 
-                // Drafts link, visible only to users who can author posts.
-                // Active when on /blog/drafts; not active on the main index.
-                if (canCreateBlogPost()) {
+                var cats = _allCategoriesCache || [];
+                var showDrafts = canCreateBlogPost();
+
+                if (showDrafts || cats.length) {
+                    items.add(
+                        'categoriesHeading',
+                        m('h4', { className: 'LinkRobinsBlog-sidebar-sectionHeading' }, tr('forum.sidebar.categories_heading')),
+                        -60
+                    );
+                }
+
+                // Drafts sits as the first entry under the Categories
+                // heading, styled like a category so it blends visually
+                // with the rest. It keeps the eye-slash icon (drafts =
+                // not visible) but uses the same category-link class as
+                // the real categories, including the colored-icon
+                // accent via --blog-cat-color (we pick a muted gray so
+                // it reads as "system" rather than borrowing a real
+                // category's brand color).
+                if (showDrafts) {
                     var draftsHref   = bp + '/' + BLOG_SLUG + '/drafts';
                     var draftsActive = isDraftsRoute();
                     items.add(
                         'drafts',
                         m(LinkButton, {
-                            href:   draftsHref,
-                            icon:   'fas fa-file-alt',
-                            active: draftsActive,
-                            title:  'Posts you have saved as drafts',
-                        }, 'Drafts'),
-                        95
+                            href:      draftsHref,
+                            icon:      'fas fa-file-alt',
+                            active:    draftsActive,
+                            className: 'LinkRobinsBlog-sidebar-categoryLink LinkRobinsBlog-sidebar-draftsLink',
+                            style:     '--blog-cat-color: var(--muted-color)',
+                            title:     tr('forum.sidebar.drafts_tooltip'),
+                        }, tr('forum.sidebar.drafts')),
+                        -61
                     );
                 }
 
-                // Forum link sits right under the blog link.
-                var forumHref = blogHome ? (bp + '/all') : (bp + '/');
-                items.add(
-                    'forumLink',
-                    m(LinkButton, {
-                        href: forumHref,
-                        icon: 'far fa-comments',
-                    }, 'Forum'),
-                    90
-                );
-
-                var cats = _allCategoriesCache || [];
                 if (cats.length) {
-                    items.add(
-                        'categoriesHeading',
-                        m('h4', { className: 'LinkRobinsBlog-sidebar-sectionHeading' }, 'Categories'),
-                        80
-                    );
-
                     cats.forEach(function (cat, i) {
                         var attr   = cat.attributes || {};
                         var slug   = attr.slug || cat.id;
@@ -1485,7 +1605,7 @@
                                 style:     color ? ('--blog-cat-color: ' + color) : '',
                                 title:     attr.description || attr.name,
                             }, attr.name),
-                            70 - i
+                            -62 - i
                         );
                     });
                 }
@@ -1510,8 +1630,20 @@
                 this.mode        = isDraftsRoute() ? 'drafts' : 'index';
 
                 try {
-                    app.setTitle(this.mode === 'drafts' ? 'Drafts' : '');
+                    app.setTitle(this.mode === 'drafts' ? tr('forum.index.hero_drafts_title') : '');
                     app.setTitleCount(0);
+                } catch (e) {}
+
+                // Tell the tags extension to skip emitting its per-tag link
+                // list in the sidebar -- we still want the "Tags" entry
+                // pointing at /tags, but not the long list of tag links,
+                // because this is a blog page and the blog has its own
+                // categories. flarum/tags reads this flag at navItems()
+                // render time. See addTagList.js in the tags extension.
+                try {
+                    if (app.current && typeof app.current.set === 'function') {
+                        app.current.set('noTagsList', true);
+                    }
                 } catch (e) {}
 
                 this._currentSlug = this.attrs && this.attrs.slug || null;
@@ -1545,7 +1677,7 @@
                     this.offset  = 0;
                     this.hasMore = true;
                     this.category = null;
-                    try { app.setTitle(this.mode === 'drafts' ? 'Drafts' : ''); } catch (e) {}
+                    try { app.setTitle(this.mode === 'drafts' ? tr('forum.index.hero_drafts_title') : ''); } catch (e) {}
                     this._load();
                 }
                 this._installScrollObserver();
@@ -1688,7 +1820,7 @@
                 } catch (e) {
                     console.error('[linkrobins/blog] index view crashed:', e);
                     return m('div', { className: 'LinkRobinsBlog' },
-                        m('div', { className: 'LinkRobinsBlog-empty' }, 'Something went wrong rendering the blog. Try refreshing the page.')
+                        m('div', { className: 'LinkRobinsBlog-empty' }, tr('forum.index.render_failed'))
                     );
                 }
             }
@@ -1698,17 +1830,17 @@
 
                 var content;
                 if (self.loading) {
-                    content = LoadingIndicator ? m(LoadingIndicator) : m('div', null, 'Loading...');
+                    content = LoadingIndicator ? m(LoadingIndicator) : m('div', null, tr('forum.index.loading'));
                 } else if (self.error) {
                     content = m('div', { className: 'LinkRobinsBlog-empty' },
                         self.mode === 'drafts'
-                            ? 'Something went wrong loading drafts.'
-                            : 'Something went wrong loading the blog.');
+                            ? tr('forum.index.drafts_load_failed')
+                            : tr('forum.index.load_failed'));
                 } else if (!self.posts.length) {
                     content = m('div', { className: 'LinkRobinsBlog-empty' },
                         self.mode === 'drafts'
-                            ? 'No drafts yet. New posts you save as drafts will appear here.'
-                            : 'No posts here yet.');
+                            ? tr('forum.index.empty_drafts')
+                            : tr('forum.index.empty'));
                 } else if (self.mode === 'drafts') {
                     // Drafts list: no featured treatment; render every entry
                     // as a card so the listing reads as a uniform queue.
@@ -1769,12 +1901,24 @@
             }
 
             _renderHero() {
+                // header_mode = 'none' suppresses the title, branding, and
+                // tagline on the BLOG HOMEPAGE only. Category and Drafts
+                // pages keep their context-specific titles because those
+                // tell the reader where they are, which is independent of
+                // brand styling.
+                var headerMode    = readForumAttribute('linkrobinsBlogHeaderMode') || 'text';
+                var suppressBrand = (headerMode === 'none')
+                    && this.mode !== 'drafts'
+                    && !this.category;
+
                 var tagline = this.category ? '' : siteTagline();
                 var titleNode;
                 if (this.mode === 'drafts') {
-                    titleNode = m('h1', { className: 'LinkRobinsBlog-hero-title' }, 'Drafts');
+                    titleNode = m('h1', { className: 'LinkRobinsBlog-hero-title' }, tr('forum.index.hero_drafts_title'));
                 } else if (this.category) {
                     titleNode = m('h1', { className: 'LinkRobinsBlog-hero-title' }, this.category.attributes.name);
+                } else if (suppressBrand) {
+                    titleNode = null;
                 } else {
                     titleNode = this._renderHeroBranding();
                 }
@@ -1796,19 +1940,42 @@
                     bgStyle = 'background-image: linear-gradient(rgba(0,0,0,' + alpha + '), rgba(0,0,0,' + alpha + ')), linear-gradient(135deg, var(--primary-color, #ff7e5f), var(--secondary-color, #1a2535));';
                 }
 
+                // When branding is suppressed AND there's no background to
+                // show, collapse the hero entirely so we don't leave a
+                // dead empty strip above the post grid.
+                if (suppressBrand && bgMode === 'none') {
+                    return null;
+                }
+                if (suppressBrand) {
+                    heroClass += ' LinkRobinsBlog-hero--imageOnly';
+                }
+
+                // Determine the inner content. When branding is suppressed,
+                // we still render the hero (for its background) but skip
+                // the inner text block entirely.
+                var taglineNode = null;
+                if (!suppressBrand) {
+                    if (this.mode === 'drafts') {
+                        taglineNode = m('p', { className: 'LinkRobinsBlog-hero-tagline' },
+                            tr('forum.index.hero_drafts_tagline'));
+                    } else if (tagline) {
+                        taglineNode = m('p', { className: 'LinkRobinsBlog-hero-tagline' }, tagline);
+                    }
+                }
+                var categoryDescNode = (!suppressBrand && this.category && this.category.attributes.description)
+                    ? m('p', { className: 'LinkRobinsBlog-hero-tagline' }, this.category.attributes.description)
+                    : null;
+
                 return m('header', { className: heroClass, style: bgStyle },
-                    m('div', { className: 'container' },
-                        m('div', { className: 'LinkRobinsBlog-hero-inner' }, [
-                            titleNode,
-                            this.mode === 'drafts'
-                                ? m('p', { className: 'LinkRobinsBlog-hero-tagline' },
-                                    'Unpublished posts you can edit or publish from here.')
-                                : (tagline ? m('p', { className: 'LinkRobinsBlog-hero-tagline' }, tagline) : null),
-                            this.category && this.category.attributes.description
-                                ? m('p', { className: 'LinkRobinsBlog-hero-tagline' }, this.category.attributes.description)
-                                : null,
-                        ])
-                    )
+                    suppressBrand
+                        ? null
+                        : m('div', { className: 'container' },
+                            m('div', { className: 'LinkRobinsBlog-hero-inner' }, [
+                                titleNode,
+                                taglineNode,
+                                categoryDescNode,
+                            ])
+                        )
                 );
             }
 
@@ -1953,7 +2120,7 @@
                                 type:      'button',
                                 className: 'Button LinkRobinsBlog-loadMore-button',
                                 onclick:   function () { self._loadMore(); },
-                              }, 'Load more')
+                              }, tr('forum.index.load_more'))
                             : null,
                 ]);
             }
@@ -1979,6 +2146,15 @@
                 this.deletingPost     = false;
 
                 this._currentSlug = stripDatePrefix(this.attrs && this.attrs.slug || null);
+
+                // Same as BlogIndexPage: tell flarum/tags to skip the
+                // per-tag list in the sidebar when on a blog article page.
+                try {
+                    if (app.current && typeof app.current.set === 'function') {
+                        app.current.set('noTagsList', true);
+                    }
+                } catch (e) {}
+
                 this._load();
 
                 var self = this;
@@ -2098,7 +2274,7 @@
 
             _editPost() {
                 this.actionsMenuOpen = false;
-                try { alert('Post editing UI is coming in Phase 3. For now, use the API directly.'); } catch (e) {}
+                try { alert(tr('forum.edit_post.editor_not_available')); } catch (e) {}
             }
 
             _deletePost() {
@@ -2108,7 +2284,7 @@
                 if (!self.post) return;
 
                 var ok = false;
-                try { ok = window.confirm('Delete this post? This cannot be undone.'); } catch (e) {}
+                try { ok = window.confirm(tr('forum.post.delete_confirm')); } catch (e) {}
                 if (!ok) return;
 
                 self.deletingPost = true;
@@ -2121,7 +2297,7 @@
                     .catch(function (err) {
                         self.deletingPost = false;
                         console.error('[linkrobins/blog] failed to delete post:', err);
-                        try { alert('Could not delete the post.'); } catch (e) {}
+                        try { alert(tr('forum.post.delete_failed')); } catch (e) {}
                         m.redraw();
                     });
             }
@@ -2132,7 +2308,7 @@
                 } catch (e) {
                     console.error('[linkrobins/blog] post view crashed:', e);
                     return m('div', { className: 'LinkRobinsBlog LinkRobinsBlog--post' },
-                        m('div', { className: 'LinkRobinsBlog-empty' }, 'Something went wrong rendering this post. Try refreshing the page.')
+                        m('div', { className: 'LinkRobinsBlog-empty' }, tr('forum.post.render_failed'))
                     );
                 }
             }
@@ -2141,9 +2317,9 @@
                 var self = this;
                 var content;
                 if (self.loading) {
-                    content = LoadingIndicator ? m(LoadingIndicator) : m('div', null, 'Loading...');
+                    content = LoadingIndicator ? m(LoadingIndicator) : m('div', null, tr('forum.index.loading'));
                 } else if (self.error || !self.post) {
-                    content = m('div', { className: 'LinkRobinsBlog-empty' }, 'Post not found.');
+                    content = m('div', { className: 'LinkRobinsBlog-empty' }, tr('forum.post.not_found'));
                 } else {
                     var attr   = self.post.attributes;
                     var author = relatedUser(self.post, self.included);
@@ -2172,7 +2348,13 @@
                                 m('img', { src: cover, alt: attr.title }),
                                 (attr.coverImageCredit && String(attr.coverImageCredit).trim() !== '')
                                     ? m('div', { className: 'LinkRobinsBlog-post-coverCredit' },
-                                        String(attr.coverImageCredit))
+                                        (attr.coverImageCreditUrl && /^https?:\/\//i.test(String(attr.coverImageCreditUrl)))
+                                            ? m('a', {
+                                                href:   String(attr.coverImageCreditUrl),
+                                                target: '_blank',
+                                                rel:    'noopener noreferrer',
+                                            }, String(attr.coverImageCredit))
+                                            : String(attr.coverImageCredit))
                                     : null,
                             ]) : null,
                             self._renderBody(attr),
@@ -2227,7 +2409,7 @@
                     m('button', {
                         type:      'button',
                         className: 'LinkRobinsBlog-post-actions-toggle',
-                        title:     'Post actions',
+                        title:     tr('forum.post.manage_menu_button'),
                         'aria-haspopup': 'true',
                         'aria-expanded': open ? 'true' : 'false',
                         onclick:   function (e) {
@@ -2259,13 +2441,13 @@
                             type:      'button',
                             className: 'LinkRobinsBlog-post-actions-item',
                             onclick:   function () { self._editPost(); },
-                        }, [m('i', { className: 'fas fa-pencil-alt' }), ' Edit post']) : null,
+                        }, [m('i', { className: 'fas fa-pencil-alt' }), ' ' + tr('forum.post.manage_edit_post')]) : null,
                         attr.canDelete ? m('button', {
                             type:      'button',
                             className: 'LinkRobinsBlog-post-actions-item LinkRobinsBlog-post-actions-item--danger',
                             disabled:  self.deletingPost,
                             onclick:   function () { self._deletePost(); },
-                        }, [m('i', { className: 'fas fa-trash' }), ' ', self.deletingPost ? 'Deleting…' : 'Delete post']) : null,
+                        }, [m('i', { className: 'fas fa-trash' }), ' ', self.deletingPost ? tr('forum.post.deleting') : tr('forum.post.manage_delete_post')]) : null,
                     ]) : null,
                 ]);
             }
@@ -2351,7 +2533,7 @@
                         setOpen(false);
                         openPostEditor(self.post, null);
                     },
-                }, [m('i', { className: 'fas fa-pencil-alt' }), ' Edit post']));
+                }, [m('i', { className: 'fas fa-pencil-alt' }), ' ' + tr('forum.post.manage_edit_post')]));
 
                 items.push(m('button', {
                     type:      'button',
@@ -2360,7 +2542,7 @@
                         setOpen(false);
                         var attr = self.post.attributes || {};
                         var ok = false;
-                        try { ok = window.confirm('Delete "' + (attr.title || 'this post') + '"? This cannot be undone.'); } catch (e) {}
+                        try { ok = window.confirm(tr('forum.edit_post.delete_confirm', { title: attr.title || tr('forum.post.this_post') })); } catch (e) {}
                         if (!ok) return;
                         var deletedId = self.post.id;
                         deleteBlogPost(deletedId)
@@ -2375,10 +2557,10 @@
                             })
                             .catch(function (err) {
                                 console.error('[linkrobins/blog] delete failed:', err);
-                                showBlogAlert('error', 'Could not delete the post.');
+                                showBlogAlert('error', tr('forum.post.delete_failed'));
                             });
                     },
-                }, [m('i', { className: 'fas fa-trash' }), ' Delete post']));
+                }, [m('i', { className: 'fas fa-trash' }), ' ' + tr('forum.post.manage_delete_post')]));
 
                 return m('div', {
                     className: 'LinkRobinsBlog-manageMenu' + (self._manageMenuOpen ? ' is-open' : ''),
@@ -2388,8 +2570,8 @@
                         className: 'Button Button--default Button--more LinkRobinsBlog-manageMenu-trigger',
                         'aria-haspopup': 'menu',
                         'aria-expanded': self._manageMenuOpen ? 'true' : 'false',
-                        'aria-label': 'Manage post',
-                        title:     'Manage post',
+                        'aria-label': tr('forum.post.manage_post_aria'),
+                        title:     tr('forum.post.manage_post_aria'),
                         onclick:   function (ev) {
                             ev.stopPropagation();
                             setOpen(!self._manageMenuOpen);
@@ -2433,16 +2615,16 @@
                     }) : null,
                     m('div', { className: 'LinkRobinsBlog-memberWall' }, [
                         m('i', { className: 'fas fa-lock LinkRobinsBlog-memberWall-icon' }),
-                        m('h3', { className: 'LinkRobinsBlog-memberWall-title' }, 'Members only'),
+                        m('h3', { className: 'LinkRobinsBlog-memberWall-title' }, tr('forum.post.members_only_heading')),
                         m('p',  { className: 'LinkRobinsBlog-memberWall-text' },
                             loggedIn
-                                ? "Your account doesn't have access to this post."
-                                : 'Log in or sign up to keep reading.'),
+                                ? tr('forum.post.members_only_text_member')
+                                : tr('forum.post.log_in_or_sign_up')),
                         loggedIn ? null : m('button', {
                             type:      'button',
                             className: 'Button Button--primary LinkRobinsBlog-memberWall-button',
                             onclick:   openLogIn,
-                        }, 'Log in to continue'),
+                        }, tr('forum.post.log_in_continue')),
                     ]),
                 ]);
             }
@@ -2488,18 +2670,18 @@
                     return null;
                 }
 
-                var countLabel = count === 0 ? 'No comments yet'
-                               : count === 1 ? '1 comment'
-                               : (count + ' comments');
+                var countLabel = count === 0 ? tr('forum.post.comments_count_none')
+                               : count === 1 ? tr('forum.post.comments_count_one')
+                               : tr('forum.post.comments_count_many', { count: count });
 
-                var actionLabel = count === 0 ? 'Start the discussion →'
-                                              : 'Read more comments →';
+                var actionLabel = count === 0 ? tr('forum.post.comments_start')
+                                              : tr('forum.post.comments_load_more');
 
                 var body;
                 if (commentsDisabled) {
                     body = m('div', { className: 'LinkRobinsBlog-comments-disabledNote' }, [
                         m('i', { className: 'fas fa-comment-slash' }),
-                        ' Comments are closed for this post.',
+                        ' ' + tr('forum.post.comments_locked'),
                     ]);
                 } else if (discussionHref) {
                     body = m('a', {
@@ -2515,7 +2697,7 @@
                         m('span', { className: 'LinkRobinsBlog-comments-linkAction' }, actionLabel),
                     ]);
                 } else {
-                    body = m('div', { className: 'LinkRobinsBlog-comments-loading' }, 'Loading…');
+                    body = m('div', { className: 'LinkRobinsBlog-comments-loading' }, tr('forum.index.loading'));
                 }
 
                 return m('section', {
@@ -2536,7 +2718,7 @@
                 if (!Array.isArray(related) || related.length === 0) return null;
 
                 return m('section', { className: 'LinkRobinsBlog-related' }, [
-                    m('h3', { className: 'LinkRobinsBlog-related-heading' }, 'Read more'),
+                    m('h3', { className: 'LinkRobinsBlog-related-heading' }, tr('forum.post.read_more_heading')),
                     m('div', { className: 'LinkRobinsBlog-related-grid' },
                         related.map(function (rp) {
                             // The related-post payload is a flat object built
