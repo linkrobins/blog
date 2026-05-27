@@ -130,8 +130,10 @@ return [
                         $key = get_class($e) . ':' . $e->getMessage();
                         if ($loggedKey !== $key) {
                             $loggedKey = $key;
-                            error_log('[linkrobins/blog] linkrobinsBlogSubscribed lookup failed: '
-                                . $e->getMessage());
+                            resolve(\Psr\Log\LoggerInterface::class)->warning(
+                                '[linkrobins/blog] linkrobinsBlogSubscribed lookup failed',
+                                ['exception' => $e]
+                            );
                         }
                         return false;
                     }
@@ -146,7 +148,7 @@ return [
                     try {
                         return $actor->can('createBlogPost');
                     } catch (\Throwable $e) {
-                        error_log('[linkrobins/blog] canCreateBlogPost probe failed: ' . $e->getMessage());
+                        resolve(\Psr\Log\LoggerInterface::class)->warning('[linkrobins/blog] canCreateBlogPost probe failed', ['exception' => $e]);
                         return false;
                     }
                 }),
@@ -160,7 +162,7 @@ return [
                     try {
                         return $actor->can('moderateBlogPosts');
                     } catch (\Throwable $e) {
-                        error_log('[linkrobins/blog] canModerateBlogPosts probe failed: ' . $e->getMessage());
+                        resolve(\Psr\Log\LoggerInterface::class)->warning('[linkrobins/blog] canModerateBlogPosts probe failed', ['exception' => $e]);
                         return false;
                     }
                 }),
