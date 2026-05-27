@@ -37,7 +37,7 @@
     function siteTitle() {
         var t = readForumAttribute('linkrobinsBlogTitle');
         if (typeof t === 'string' && t.trim() !== '') return t.trim();
-        return readForumAttribute('title') || tr('ref.blog');
+        return readForumAttribute('title') || tr('forum.blog');
     }
 
     function siteTagline() {
@@ -55,7 +55,7 @@
     function navLabel() {
         var v = readForumAttribute('linkrobinsBlogNavLabel');
         if (typeof v === 'string' && v.trim() !== '') return v.trim();
-        return tr('ref.blog');
+        return tr('forum.blog');
     }
 
     function navIcon() {

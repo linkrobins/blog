@@ -172,6 +172,10 @@ linkrobins-blog:
   ##
   forum:
 
+    # The blog's section name, used as the nav label and the default
+    # page title when no custom blog title is configured.
+    blog: "Blog"
+
     # The blog's own sidebar.
     sidebar:
       all_posts: All posts
@@ -304,9 +308,3 @@ linkrobins-blog:
     # Notifications from the blog.
     notifications:
       new_post_text: "New post: {title}"
-
-  ##
-  # Reusable references.
-  ##
-  ref:
-    blog: Blog
