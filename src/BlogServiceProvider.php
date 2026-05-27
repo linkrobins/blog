@@ -95,7 +95,7 @@ class BlogServiceProvider extends AbstractServiceProvider
                 $dispatcher = resolve(\Illuminate\Contracts\Bus\Dispatcher::class);
                 $dispatcher->dispatch(new \LinkRobins\Blog\Job\SendNewsletter($blogPost->id, false));
             } catch (\Throwable $e) {
-                error_log('[linkrobins/blog] auto-broadcast failed: ' . $e->getMessage());
+                resolve(\Psr\Log\LoggerInterface::class)->warning('[linkrobins/blog] auto-broadcast failed', ['exception' => $e]);
             }
         });
 

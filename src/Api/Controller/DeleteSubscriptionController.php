@@ -30,7 +30,7 @@ class DeleteSubscriptionController implements RequestHandlerInterface
                 ->where('user_id', $actor->id)
                 ->delete();
         } catch (\Throwable $e) {
-            error_log('[linkrobins/blog] unsubscribe failed: ' . $e->getMessage());
+            resolve(\Psr\Log\LoggerInterface::class)->warning('[linkrobins/blog] unsubscribe failed', ['exception' => $e]);
             return new JsonResponse([
                 'errors' => [[
                     'status' => '500',

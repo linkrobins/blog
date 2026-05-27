@@ -93,9 +93,8 @@ class BlogCategoryResource extends AbstractDatabaseResource
                     if (! preg_match('/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/', $trimmed)) {
                         // Silently drop invalid values rather than throwing —
                         // matches Flarum's behaviour for other admin-only
-                        // colour fields. Logs for visibility.
-                        error_log('[linkrobins/blog] rejected non-hex category color: '
-                            . substr($trimmed, 0, 50));
+                        // colour fields. Invalid input is expected here, not
+                        // an error, so we drop it without logging.
                         return;
                     }
                     $category->color = $trimmed;
@@ -117,8 +116,7 @@ class BlogCategoryResource extends AbstractDatabaseResource
                     }
                     $trimmed = trim($value);
                     if (! preg_match('/^[a-z0-9 \-]+$/', $trimmed)) {
-                        error_log('[linkrobins/blog] rejected invalid category icon: '
-                            . substr($trimmed, 0, 100));
+                        // Invalid input is expected here; drop it without logging.
                         return;
                     }
                     $category->icon = $trimmed;

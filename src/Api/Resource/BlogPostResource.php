@@ -319,8 +319,7 @@ class BlogPostResource extends AbstractDatabaseResource
                         return;
                     }
                     if (! preg_match('#^https?://#i', $trimmed)) {
-                        error_log('[linkrobins/blog] rejected non-http credit URL: '
-                            . substr($trimmed, 0, 80));
+                        // Invalid input is expected here; drop it without logging.
                         return;
                     }
                     $post->cover_image_credit_url = $trimmed;
@@ -392,8 +391,10 @@ class BlogPostResource extends AbstractDatabaseResource
                         $key = get_class($e) . ':' . $e->getMessage();
                         if ($loggedKey !== $key) {
                             $loggedKey = $key;
-                            error_log('[linkrobins/blog] commentCount query failed for post '
-                                . $post->id . ': ' . $e->getMessage());
+                            resolve(\Psr\Log\LoggerInterface::class)->warning(
+                                '[linkrobins/blog] commentCount query failed for post ' . $post->id,
+                                ['exception' => $e]
+                            );
                         }
                         return 0;
                     }
@@ -436,8 +437,10 @@ class BlogPostResource extends AbstractDatabaseResource
                         $key = get_class($e) . ':' . $e->getMessage();
                         if ($loggedKey !== $key) {
                             $loggedKey = $key;
-                            error_log('[linkrobins/blog] discussionId lazy-create failed for post '
-                                . $post->id . ': ' . $e->getMessage());
+                            resolve(\Psr\Log\LoggerInterface::class)->warning(
+                                '[linkrobins/blog] discussionId lazy-create failed for post ' . $post->id,
+                                ['exception' => $e]
+                            );
                         }
                         return null;
                     }
@@ -534,8 +537,10 @@ class BlogPostResource extends AbstractDatabaseResource
                         $key = get_class($e) . ':' . $e->getMessage();
                         if ($loggedKey !== $key) {
                             $loggedKey = $key;
-                            error_log('[linkrobins/blog] relatedPosts query failed for post '
-                                . $post->id . ': ' . $e->getMessage());
+                            resolve(\Psr\Log\LoggerInterface::class)->warning(
+                                '[linkrobins/blog] relatedPosts query failed for post ' . $post->id,
+                                ['exception' => $e]
+                            );
                         }
                         return [];
                     }

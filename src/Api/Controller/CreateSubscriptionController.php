@@ -32,7 +32,7 @@ class CreateSubscriptionController implements RequestHandlerInterface
                 ['created_at' => Carbon::now()]
             );
         } catch (\Throwable $e) {
-            error_log('[linkrobins/blog] subscribe failed: ' . $e->getMessage());
+            resolve(\Psr\Log\LoggerInterface::class)->warning('[linkrobins/blog] subscribe failed', ['exception' => $e]);
             return new JsonResponse([
                 'errors' => [[
                     'status' => '500',

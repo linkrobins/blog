@@ -31,7 +31,7 @@ class ShowSubscriptionController implements RequestHandlerInterface
                 ->where('user_id', $actor->id)
                 ->exists();
         } catch (\Throwable $e) {
-            error_log('[linkrobins/blog] subscription status failed: ' . $e->getMessage());
+            resolve(\Psr\Log\LoggerInterface::class)->warning('[linkrobins/blog] subscription status failed', ['exception' => $e]);
             return new JsonResponse([
                 'errors' => [[
                     'status' => '500',

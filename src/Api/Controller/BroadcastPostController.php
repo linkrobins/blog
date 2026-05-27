@@ -79,7 +79,7 @@ class BroadcastPostController implements RequestHandlerInterface
         try {
             $this->bus->dispatch(new SendNewsletter($post->id, $force));
         } catch (\Throwable $e) {
-            error_log('[linkrobins/blog] broadcast dispatch failed: ' . $e->getMessage());
+            resolve(\Psr\Log\LoggerInterface::class)->warning('[linkrobins/blog] broadcast dispatch failed', ['exception' => $e]);
             return $this->error(500, 'broadcast_dispatch_failed',
                 'Could not dispatch the broadcast. Check server logs for details.');
         }
