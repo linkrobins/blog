@@ -327,7 +327,7 @@
                             m('i', { className: tab.icon }),
                             ' ',
                             tab.label,
-                            tab.disabled ? m('span', { className: 'LinkRobinsBlog-admin-tab-hint' }, ' · soon') : null,
+                            tab.disabled ? m('span', { className: 'LinkRobinsBlog-admin-tab-hint' }, t('admin.tabs.soon_badge')) : null,
                         ]);
                     })
                 );
@@ -441,7 +441,7 @@
             _deleteCategory(cat) {
                 var self = this;
                 var attr = cat.attributes || {};
-                var name = attr.name || ('category #' + cat.id);
+                var name = attr.name || t('admin.categories.fallback_name', { id: cat.id });
                 var count = typeof attr.postCount === 'number' ? attr.postCount : null;
                 var warn;
                 if (count && count > 0) {
@@ -936,5 +936,3 @@
     }
 
 })();
-
-module.exports = {};

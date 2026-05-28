@@ -11,12 +11,14 @@ use LinkRobins\Blog\Api\Resource\BlogCategoryResource;
 use LinkRobins\Blog\Api\Resource\BlogPostResource;
 use LinkRobins\Blog\BlogCategory;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Log\LoggerInterface;
 
 class BlogCategoryShow
 {
     public function __construct(
         protected JsonApi $api,
         protected SettingsRepositoryInterface $settings,
+        protected LoggerInterface $log,
     ) {
     }
 
@@ -59,6 +61,7 @@ class BlogCategoryShow
             $document->payload['categorySlug'] = $slug;
             $document->payload['categoryName'] = $category->name;
         } catch (\Throwable $e) {
+            $this->log->warning('[linkrobins/blog] category page SSR preload failed', ['exception' => $e]);
             $document->payload['apiDocument'] = null;
         }
 

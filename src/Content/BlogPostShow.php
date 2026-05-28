@@ -8,12 +8,14 @@ use Flarum\Http\RequestUtil;
 use Flarum\Settings\SettingsRepositoryInterface;
 use LinkRobins\Blog\Api\Resource\BlogPostResource;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Log\LoggerInterface;
 
 class BlogPostShow
 {
     public function __construct(
         protected JsonApi $api,
         protected SettingsRepositoryInterface $settings,
+        protected LoggerInterface $log,
     ) {
     }
 
@@ -51,6 +53,7 @@ class BlogPostShow
                 $document->title = $title;
             }
         } catch (\Throwable $e) {
+            $this->log->warning('[linkrobins/blog] article page SSR preload failed', ['exception' => $e]);
             $document->payload['apiDocument'] = null;
         }
 

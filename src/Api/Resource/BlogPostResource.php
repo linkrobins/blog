@@ -34,6 +34,18 @@ class BlogPostResource extends AbstractDatabaseResource
     {
         $actor = $context->getActor();
 
+        // Batch the per-post discussion work into one query each for the whole
+        // page: eager-load the comment Discussion (powers `discussionId`) and a
+        // filtered count of its comments (powers `commentCount`). Without this,
+        // those two fields each fire an independent query per serialized post
+        // (N+1) on every blog index/category listing. The `comments` relation
+        // already excludes the bookmark first post (number > 1, type=comment);
+        // we add the same hidden/private filters the field used.
+        $query->with('discussion')
+            ->withCount(['comments' => function ($q) {
+                $q->whereNull('posts.hidden_at')->where('posts.is_private', false);
+            }]);
+
         // Visibility filter: who sees drafts?
         //   - Admin or moderator: everything, no is_published filter
         //   - Authors with .start: published posts + their own drafts
@@ -367,10 +379,15 @@ class BlogPostResource extends AbstractDatabaseResource
             // including the server-side preload for /blog).
             Schema\Integer::make('commentCount')
                 ->get(function (BlogPost $post) {
+                    // Prefer the batched count eager-loaded in scope(). Fall
+                    // back to a direct query only if the attribute is absent
+                    // (e.g. a post serialized outside the resource scope).
+                    $batched = $post->getAttribute('comments_count');
+                    if ($batched !== null) {
+                        return (int) $batched;
+                    }
                     try {
-                        $discussion = \Flarum\Discussion\Discussion::query()
-                            ->where('blog_post_id', $post->id)
-                            ->first(['id', 'first_post_id']);
+                        $discussion = $post->discussion;
                         if (! $discussion) {
                             return 0;
                         }
@@ -418,15 +435,16 @@ class BlogPostResource extends AbstractDatabaseResource
             Schema\Integer::make('discussionId')
                 ->get(function (BlogPost $post) {
                     try {
-                        $d = \Flarum\Discussion\Discussion::query()
-                            ->where('blog_post_id', $post->id)
-                            ->first();
+                        // Eager-loaded in scope() -> no per-post query on listings.
+                        $d = $post->discussion;
                         if ($d) {
                             return $d->id;
                         }
                         if (! $post->is_published || ! $post->comments_enabled) {
                             return null;
                         }
+                        // Backstop for a published, comments-enabled post that
+                        // somehow lacks a discussion (e.g. it was deleted).
                         $created = \LinkRobins\Blog\BlogServiceProvider::ensureCommentDiscussion($post);
                         return $created?->id;
                     } catch (\Throwable $e) {

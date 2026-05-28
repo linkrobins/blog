@@ -7,6 +7,7 @@ use Flarum\Api\Endpoint;
 use Flarum\Api\Resource\AbstractDatabaseResource;
 use Flarum\Api\Schema;
 use Flarum\Api\Sort\SortColumn;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
 use LinkRobins\Blog\BlogCategory;
 use Tobyz\JsonApiServer\Context;
@@ -30,6 +31,13 @@ class BlogCategoryResource extends AbstractDatabaseResource
         }
 
         return $this->query($context)->where('slug', $id)->first();
+    }
+
+    public function scope(Builder $query, Context $context): void
+    {
+        // Eager-load each category's post count for the whole listing in one
+        // query, instead of one COUNT per category row (postCount field N+1).
+        $query->withCount('posts');
     }
 
     public function endpoints(): array
@@ -127,7 +135,7 @@ class BlogCategoryResource extends AbstractDatabaseResource
                 ->property('newsletter_enabled')
                 ->writable(),
             Schema\Integer::make('postCount')
-                ->get(fn (BlogCategory $category) => $category->posts()->count()),
+                ->get(fn (BlogCategory $category) => (int) ($category->posts_count ?? $category->posts()->count())),
             Schema\DateTime::make('createdAt')
                 ->property('created_at'),
             Schema\DateTime::make('updatedAt')

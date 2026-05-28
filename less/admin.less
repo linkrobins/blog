@@ -404,6 +404,17 @@
 }
 
 .LinkRobinsBlog-categoryEditor {
+    // Match the post editor modal: give the field stack consistent vertical
+    // rhythm. Core's `.Form-body` uses `gap: var(--gap)`, so without an
+    // explicit --gap the gap resolves to nothing and the fields collapse
+    // together.
+    .Form-body {
+        --gap: 18px;
+        gap: 18px;
+
+        > * { width: 100%; }
+    }
+
     &-row {
         display: grid;
         grid-template-columns: repeat(3, 1fr);

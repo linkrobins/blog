@@ -9,6 +9,7 @@ use Flarum\Settings\SettingsRepositoryInterface;
 use Illuminate\Support\Arr;
 use LinkRobins\Blog\Api\Resource\BlogPostResource;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * Server-side renderer for /blog/drafts.
@@ -30,6 +31,7 @@ class BlogDrafts
     public function __construct(
         protected JsonApi $api,
         protected SettingsRepositoryInterface $settings,
+        protected LoggerInterface $log,
     ) {
     }
 
@@ -60,6 +62,7 @@ class BlogDrafts
 
             $document->payload['apiDocument'] = json_decode(json_encode($apiDocument), true);
         } catch (\Throwable $e) {
+            $this->log->warning('[linkrobins/blog] /blog/drafts SSR preload failed', ['exception' => $e]);
             $document->payload['apiDocument'] = null;
         }
 

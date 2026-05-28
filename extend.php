@@ -25,7 +25,7 @@ use LinkRobins\Blog\Search\HideBlogDiscussionsFromListings;
 
 return [
     (new Extend\Frontend('forum'))
-        ->js(__DIR__ . '/js/forum.js')
+        ->js(__DIR__ . '/js/dist/forum.js')
         ->css(__DIR__ . '/less/forum.less')
         ->route('/blog',                                'linkrobins-blog.index',       BlogIndex::class)
         ->route('/blog/drafts',                         'linkrobins-blog.drafts',      BlogDrafts::class)
@@ -34,7 +34,7 @@ return [
         ->route('/linkrobins-blog/unsubscribe/{token}', 'linkrobins-blog.unsubscribe', Unsubscribe::class),
 
     (new Extend\Frontend('admin'))
-        ->js(__DIR__ . '/js/admin.js')
+        ->js(__DIR__ . '/js/dist/admin.js')
         ->css(__DIR__ . '/less/admin.less'),
 
     new Extend\Locales(__DIR__ . '/locale'),

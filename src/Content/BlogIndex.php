@@ -9,12 +9,14 @@ use Flarum\Settings\SettingsRepositoryInterface;
 use Illuminate\Support\Arr;
 use LinkRobins\Blog\Api\Resource\BlogPostResource;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Log\LoggerInterface;
 
 class BlogIndex
 {
     public function __construct(
         protected JsonApi $api,
         protected SettingsRepositoryInterface $settings,
+        protected LoggerInterface $log,
     ) {
     }
 
@@ -44,6 +46,7 @@ class BlogIndex
 
             $document->payload['apiDocument'] = json_decode(json_encode($apiDocument), true);
         } catch (\Throwable $e) {
+            $this->log->warning('[linkrobins/blog] /blog index SSR preload failed', ['exception' => $e]);
             $document->payload['apiDocument'] = null;
         }
 

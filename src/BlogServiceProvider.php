@@ -9,6 +9,8 @@ use Flarum\Http\UrlGenerator;
 use Flarum\Post\CommentPost;
 use Flarum\Post\Post;
 use Carbon\Carbon;
+use Illuminate\Contracts\Bus\Dispatcher;
+use Psr\Log\LoggerInterface;
 
 class BlogServiceProvider extends AbstractServiceProvider
 {
@@ -16,7 +18,7 @@ class BlogServiceProvider extends AbstractServiceProvider
     {
     }
 
-    public function boot(Formatter $formatter): void
+    public function boot(Formatter $formatter, Dispatcher $bus, LoggerInterface $log): void
     {
         BlogPost::setFormatter($formatter);
 
@@ -76,7 +78,7 @@ class BlogServiceProvider extends AbstractServiceProvider
         // its category has newsletter_enabled=true, dispatch the newsletter
         // job. The job itself checks broadcast_sent_at to prevent
         // duplicate sends across multiple saves.
-        BlogPost::saved(function (BlogPost $blogPost) {
+        BlogPost::saved(function (BlogPost $blogPost) use ($bus, $log) {
             try {
                 if (! $blogPost->wasChanged('is_published')) {
                     return;
@@ -92,10 +94,9 @@ class BlogServiceProvider extends AbstractServiceProvider
                     return;
                 }
 
-                $dispatcher = resolve(\Illuminate\Contracts\Bus\Dispatcher::class);
-                $dispatcher->dispatch(new \LinkRobins\Blog\Job\SendNewsletter($blogPost->id, false));
+                $bus->dispatch(new \LinkRobins\Blog\Job\SendNewsletter($blogPost->id, false));
             } catch (\Throwable $e) {
-                resolve(\Psr\Log\LoggerInterface::class)->warning('[linkrobins/blog] auto-broadcast failed', ['exception' => $e]);
+                $log->warning('[linkrobins/blog] auto-broadcast failed', ['exception' => $e]);
             }
         });
 

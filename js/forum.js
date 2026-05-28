@@ -1079,30 +1079,32 @@
             _renderToolbar() {
                 var self = this;
                 var btns = [
-                    { icon: 'fas fa-bold',           title: 'Bold',         apply: function (ta) { insertAtCursor(ta, '**', '**', 'bold text'); } },
-                    { icon: 'fas fa-italic',         title: 'Italic',       apply: function (ta) { insertAtCursor(ta, '*',  '*',  'italic text'); } },
-                    { icon: 'fas fa-heading',        title: 'Heading',      apply: function (ta) { insertAtCursor(ta, '\n## ', '', 'Heading'); } },
-                    { icon: 'fas fa-link',           title: 'Link',         apply: function (ta) {
+                    { icon: 'fas fa-bold',           title: tr('forum.edit_post.toolbar_bold_title'),         apply: function (ta) { insertAtCursor(ta, '**', '**', tr('forum.edit_post.snippet_bold')); } },
+                    { icon: 'fas fa-italic',         title: tr('forum.edit_post.toolbar_italic_title'),       apply: function (ta) { insertAtCursor(ta, '*',  '*',  tr('forum.edit_post.snippet_italic')); } },
+                    { icon: 'fas fa-heading',        title: tr('forum.edit_post.toolbar_heading_title'),      apply: function (ta) { insertAtCursor(ta, '\n## ', '', tr('forum.edit_post.snippet_heading')); } },
+                    { icon: 'fas fa-link',           title: tr('forum.edit_post.toolbar_link_title'),         apply: function (ta) {
                         var url = '';
-                        try { url = window.prompt('URL:', 'https://') || ''; } catch (e) {}
+                        try { url = window.prompt(tr('forum.edit_post.prompt_url'), 'https://') || ''; } catch (e) {}
                         if (!url) return;
-                        insertAtCursor(ta, '[', '](' + url + ')', 'link text');
+                        insertAtCursor(ta, '[', '](' + url + ')', tr('forum.edit_post.snippet_link'));
                     } },
-                    { icon: 'fas fa-image',          title: 'Image (URL)',  apply: function (ta) {
+                    { icon: 'fas fa-image',          title: tr('forum.edit_post.toolbar_image_url_title'),  apply: function (ta) {
                         var url = '';
-                        try { url = window.prompt('Image URL:', 'https://') || ''; } catch (e) {}
+                        try { url = window.prompt(tr('forum.edit_post.prompt_image_url'), 'https://') || ''; } catch (e) {}
                         if (!url) return;
-                        insertAtCursor(ta, '![', '](' + url + ')', 'alt text');
+                        insertAtCursor(ta, '![', '](' + url + ')', tr('forum.edit_post.snippet_image'));
                     } },
-                    { icon: 'fas fa-code',           title: 'Inline code',  apply: function (ta) { insertAtCursor(ta, '`',  '`', 'code'); } },
-                    { icon: 'fas fa-file-code',      title: 'Code block',   apply: function (ta) { insertAtCursor(ta, '\n```\n', '\n```\n', 'code here'); } },
-                    { icon: 'fas fa-eye-slash',      title: 'Spoiler',      apply: function (ta) { insertAtCursor(ta, '[spoiler]', '[/spoiler]', 'hidden text'); } },
-                    { icon: 'fas fa-table',          title: 'Table',        apply: function (ta) {
-                        insertAtCursor(ta, '\n| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Cell | Cell | Cell |\n| Cell | Cell | Cell |\n', '', '');
+                    { icon: 'fas fa-code',           title: tr('forum.edit_post.toolbar_inline_code_title'),  apply: function (ta) { insertAtCursor(ta, '`',  '`', tr('forum.edit_post.snippet_inline_code')); } },
+                    { icon: 'fas fa-file-code',      title: tr('forum.edit_post.toolbar_code_block_title'),   apply: function (ta) { insertAtCursor(ta, '\n```\n', '\n```\n', tr('forum.edit_post.snippet_code_block')); } },
+                    { icon: 'fas fa-eye-slash',      title: tr('forum.edit_post.toolbar_spoiler_title'),      apply: function (ta) { insertAtCursor(ta, '[spoiler]', '[/spoiler]', tr('forum.edit_post.snippet_spoiler')); } },
+                    { icon: 'fas fa-table',          title: tr('forum.edit_post.toolbar_table_title'),        apply: function (ta) {
+                        var col  = tr('forum.edit_post.snippet_table_column');
+                        var cell = tr('forum.edit_post.snippet_table_cell');
+                        insertAtCursor(ta, '\n| ' + col + ' 1 | ' + col + ' 2 | ' + col + ' 3 |\n| --- | --- | --- |\n| ' + cell + ' | ' + cell + ' | ' + cell + ' |\n| ' + cell + ' | ' + cell + ' | ' + cell + ' |\n', '', '');
                     } },
-                    { icon: 'fas fa-quote-right',    title: 'Quote',        apply: function (ta) { insertAtCursor(ta, '\n> ', '', 'quoted text'); } },
-                    { icon: 'fas fa-list-ul',        title: 'Bulleted list',apply: function (ta) { insertAtCursor(ta, '\n- ', '',  'item'); } },
-                    { icon: 'fas fa-list-ol',        title: 'Numbered list',apply: function (ta) { insertAtCursor(ta, '\n1. ', '', 'item'); } },
+                    { icon: 'fas fa-quote-right',    title: tr('forum.edit_post.toolbar_quote_title'),        apply: function (ta) { insertAtCursor(ta, '\n> ', '', tr('forum.edit_post.snippet_quote')); } },
+                    { icon: 'fas fa-list-ul',        title: tr('forum.edit_post.toolbar_bulleted_list_title'),apply: function (ta) { insertAtCursor(ta, '\n- ', '',  tr('forum.edit_post.snippet_list_item')); } },
+                    { icon: 'fas fa-list-ol',        title: tr('forum.edit_post.toolbar_numbered_list_title'),apply: function (ta) { insertAtCursor(ta, '\n1. ', '', tr('forum.edit_post.snippet_list_item')); } },
                 ];
 
                 var children = btns.map(function (b) {
@@ -2773,5 +2775,3 @@
     }
 
 })();
-
-module.exports = {};
