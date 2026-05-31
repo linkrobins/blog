@@ -3,6 +3,12 @@
     "description": "A Ghost-style standalone blog for Flarum. Admin-managed posts and categories, member-only post gating, comments as real Flarum discussions, and a built-in newsletter with broadcast over SMTP.",
     "type": "flarum-extension",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "Karl Bullock",
+            "email": "karl@linkrobins.com"
+        }
+    ],
     "require": {
         "php": "^8.2",
         "flarum/core": "^2.0"
