@@ -1303,6 +1303,44 @@ html.LinkRobinsBlogActive {
     color: var(--primary-color, currentColor);
 }
 
+// ---- Embedded core editor (TextEditor) -----------------------------------
+// The post body embeds Flarum's composer editor for its Markdown toolbar +
+// @mentions. Its default styles assume the docked bottom composer (a -105px
+// control gutter, a border/height-less textarea, and a header-styled submit
+// button), which looks broken inline. Reframe it as a normal bordered field
+// and hide the built-in submit -- the post's Publish / Save-draft buttons are
+// the real actions.
+.LinkRobinsBlog-editorWrap {
+    border: 1px solid var(--control-bg, rgba(0, 0, 0, 0.12));
+    border-radius: 4px;
+    padding: 8px 12px;
+    background: var(--body-bg, #fff);
+
+    .TextEditor {
+        display: block;
+    }
+    .TextEditor-editor {
+        min-height: 280px;
+        padding: 0;
+    }
+    // Drop the docked-composer gutter margins so the toolbar stays in our box.
+    .TextEditor-controls {
+        margin: 0;
+        padding: 6px 0 0;
+        border-top: 1px solid var(--control-bg, rgba(0, 0, 0, 0.08));
+        overflow-x: auto;
+    }
+    .TextEditor-controls .item-submit {
+        display: none;
+    }
+}
+
+// With the embedded editor the custom toolbar is reduced to a lone upload
+// button shown above the editor.
+.LinkRobinsBlog-editor-toolbar--uploadOnly {
+    margin-bottom: 8px;
+}
+
 .LinkRobinsBlog-editor-bodyUploadStatus {
     display: flex;
     align-items: center;

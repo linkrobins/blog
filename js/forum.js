@@ -410,6 +410,18 @@
         } catch (e) {}
     }
 
+    // Resolve Flarum's core TextEditor -- the Markdown editor (toolbar +
+    // @mentions) used in the composer. Returns null if unavailable, so the
+    // post body falls back to the plain textarea + custom toolbar below.
+    function getTextEditor() {
+        try {
+            var mod = flarum.reg.get('core', 'common/components/TextEditor');
+            return (mod && mod.default) || mod || null;
+        } catch (e) {
+            return null;
+        }
+    }
+
     function isFofUploadInstalled() {
         try {
             if (typeof flarum !== 'undefined' && flarum.extensions && flarum.extensions['fof-upload']) {
@@ -1078,6 +1090,29 @@
 
             _renderToolbar() {
                 var self = this;
+
+                // When Flarum's editor is embedded, its own Markdown toolbar
+                // replaces these formatting buttons; we keep only the image-
+                // upload control (fof/upload), which the core toolbar lacks.
+                if (getTextEditor()) {
+                    if (!isFofUploadInstalled()) return null;
+                    return m('div', { className: 'LinkRobinsBlog-editor-toolbar LinkRobinsBlog-editor-toolbar--uploadOnly' },
+                        m('button', {
+                            type:      'button',
+                            className: 'LinkRobinsBlog-editor-toolbarBtn LinkRobinsBlog-editor-toolbarBtn--upload',
+                            title:     tr('forum.edit_post.toolbar_image_title'),
+                            disabled:  self.saving || self.bodyUploading,
+                            onclick:   function () { self._pickBodyFiles(); },
+                        }, [
+                            self.bodyUploading
+                                ? m('i', { className: 'fas fa-spinner fa-spin' })
+                                : m('i', { className: 'fas fa-cloud-upload-alt' }),
+                            ' ',
+                            m('span', tr('forum.edit_post.toolbar_image_title')),
+                        ])
+                    );
+                }
+
                 var btns = [
                     { icon: 'fas fa-bold',           title: tr('forum.edit_post.toolbar_bold_title'),         apply: function (ta) { insertAtCursor(ta, '**', '**', tr('forum.edit_post.snippet_bold')); } },
                     { icon: 'fas fa-italic',         title: tr('forum.edit_post.toolbar_italic_title'),       apply: function (ta) { insertAtCursor(ta, '*',  '*',  tr('forum.edit_post.snippet_italic')); } },
@@ -1141,8 +1176,30 @@
             _renderBody() {
                 var self = this;
                 var hasFofUpload = isFofUploadInstalled();
-                return m('div', { className: 'LinkRobinsBlog-editor-bodyGroup' }, [
-                    m('textarea', {
+                var TextEditor = getTextEditor();
+
+                var bodyInput;
+                if (TextEditor) {
+                    // Flarum's composer editor: Markdown toolbar + @mentions.
+                    // The keyed editor must be the sole child of an unkeyed
+                    // wrapper (mithril forbids mixed keyed/unkeyed siblings).
+                    // It's uncontrolled, but this editor is a Modal that mounts
+                    // fresh each open, so there's no external value to re-sync.
+                    if (!self._bodyComposer) self._bodyComposer = {};
+                    bodyInput = m('div', { className: 'LinkRobinsBlog-editorWrap' }, m(TextEditor, {
+                        key:         'lr-blog-body',
+                        composer:    self._bodyComposer,
+                        value:       self.bodyText,
+                        disabled:    self.saving,
+                        placeholder: tr('forum.edit_post.body_placeholder'),
+                        submitLabel: tr('forum.edit_post.publish_button'),
+                        onchange:    function (v) { self.bodyText = v; },
+                        // The editor's own submit is hidden; the post's
+                        // Publish / Save-draft buttons are the real actions.
+                        onsubmit:    function () {},
+                    }));
+                } else {
+                    bodyInput = m('textarea', {
                         id:         'LinkRobinsBlog-editor-body',
                         className:  'FormControl LinkRobinsBlog-editor-bodyInput',
                         value:      self.bodyText,
@@ -1150,7 +1207,11 @@
                         rows:       16,
                         placeholder: tr('forum.edit_post.body_placeholder'),
                         oninput:    function (e) { self.bodyText = e.target.value; },
-                    }),
+                    });
+                }
+
+                return m('div', { className: 'LinkRobinsBlog-editor-bodyGroup' }, [
+                    bodyInput,
                     hasFofUpload ? m('input', {
                         type:     'file',
                         accept:   'image/*',
@@ -1215,20 +1276,28 @@
                         var url = uploaded && uploaded.attributes && uploaded.attributes.url;
                         var name = (uploaded && uploaded.attributes && (uploaded.attributes.baseName || uploaded.attributes.path)) || (file.name || 'image');
                         if (url) {
-                            // Insert markdown image at end of body (newline-separated).
-                            var ta = document.getElementById('LinkRobinsBlog-editor-body');
                             var snippet = '![' + name.replace(/[\[\]]/g, '') + '](' + url + ')';
-                            if (ta && typeof ta.selectionStart === 'number') {
-                                // Insert at cursor on first iteration; subsequent ones append after the inserted text.
-                                var insertText = (ta.value && !/\n\n$/.test(ta.value) && ta.selectionStart === ta.value.length ? '\n\n' : '') + snippet + '\n\n';
-                                var start = ta.selectionStart, end = ta.selectionEnd;
-                                ta.value = ta.value.slice(0, start) + insertText + ta.value.slice(end);
-                                var pos = start + insertText.length;
-                                ta.selectionStart = ta.selectionEnd = pos;
-                                self.bodyText = ta.value;
+                            var editor = self._bodyComposer && self._bodyComposer.editor;
+                            if (editor && typeof editor.insertAt === 'function' && editor.el) {
+                                // Insert into the embedded core editor; its
+                                // oninput fires onchange, keeping bodyText synced.
+                                var curVal = editor.el.value || '';
+                                var lead = (curVal && !/\n\n$/.test(curVal)) ? '\n\n' : '';
+                                editor.insertAt(curVal.length, lead + snippet + '\n\n');
                             } else {
-                                var sep = (self.bodyText && !/\n\n$/.test(self.bodyText)) ? '\n\n' : '';
-                                self.bodyText = (self.bodyText || '') + sep + snippet + '\n\n';
+                                // Fallback: the plain textarea (no embedded editor).
+                                var ta = document.getElementById('LinkRobinsBlog-editor-body');
+                                if (ta && typeof ta.selectionStart === 'number') {
+                                    var insertText = (ta.value && !/\n\n$/.test(ta.value) && ta.selectionStart === ta.value.length ? '\n\n' : '') + snippet + '\n\n';
+                                    var start = ta.selectionStart, end = ta.selectionEnd;
+                                    ta.value = ta.value.slice(0, start) + insertText + ta.value.slice(end);
+                                    var pos = start + insertText.length;
+                                    ta.selectionStart = ta.selectionEnd = pos;
+                                    self.bodyText = ta.value;
+                                } else {
+                                    var sep = (self.bodyText && !/\n\n$/.test(self.bodyText)) ? '\n\n' : '';
+                                    self.bodyText = (self.bodyText || '') + sep + snippet + '\n\n';
+                                }
                             }
                         }
                         processNext(i + 1);

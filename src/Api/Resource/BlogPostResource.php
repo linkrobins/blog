@@ -301,7 +301,29 @@ class BlogPostResource extends AbstractDatabaseResource
                 ->property('cover_image_url')
                 ->writable()
                 ->nullable()
-                ->maxLength(500),
+                ->maxLength(500)
+                // Only accept http(s) cover URLs. Today every consumer renders
+                // this in a non-executable context (<img src>, CSS url(), the
+                // formatter-sanitized bookmark card), so a javascript:/data: URL
+                // isn't currently a script primitive -- but this guard mirrors
+                // coverImageCreditUrl and keeps it from becoming one if a future
+                // template ever emits it into <a href>/style/onerror. Empty/null
+                // clears the cover.
+                ->set(function (BlogPost $post, ?string $value) {
+                    if ($value === null) {
+                        $post->cover_image_url = null;
+                        return;
+                    }
+                    $trimmed = trim($value);
+                    if ($trimmed === '') {
+                        $post->cover_image_url = null;
+                        return;
+                    }
+                    if (! preg_match('#^https?://#i', $trimmed)) {
+                        return;
+                    }
+                    $post->cover_image_url = $trimmed;
+                }),
 
             Schema\Str::make('coverImageCredit')
                 ->property('cover_image_credit')
@@ -339,7 +361,14 @@ class BlogPostResource extends AbstractDatabaseResource
 
             Schema\Str::make('visibility')
                 ->writable()
-                ->default(BlogPost::VISIBILITY_PUBLIC),
+                ->default(BlogPost::VISIBILITY_PUBLIC)
+                // Constrain to the two known values; anything else falls back to
+                // public so a garbage value can't produce an indeterminate state.
+                ->set(function (BlogPost $post, ?string $value) {
+                    $post->visibility = $value === BlogPost::VISIBILITY_MEMBERS
+                        ? BlogPost::VISIBILITY_MEMBERS
+                        : BlogPost::VISIBILITY_PUBLIC;
+                }),
 
             Schema\Boolean::make('isPublished')
                 ->property('is_published')
