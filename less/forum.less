@@ -949,6 +949,51 @@ html.LinkRobinsBlogActive {
     }
 }
 
+// The post editor is now a full page (not a modal) so the docked composer can
+// be used for the body. Constrain its width and give it breathing room.
+.LinkRobinsBlog-editor--page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 8px 0 40px;
+}
+
+.LinkRobinsBlog-editor-pageTitle {
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin: 0 0 20px;
+}
+
+// Discussion-style "click to write…" body box + live preview while composing.
+.LinkRobinsBlog-bodyPlaceholder {
+    display: block;
+    width: 100%;
+
+    .ReplyPlaceholder,
+    .Post {
+        display: block;
+        width: 100%;
+        margin: 0;
+        box-sizing: border-box;
+    }
+}
+
+.LinkRobinsBlog-composerTitle {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    i { color: var(--primary-color, #07adcc); }
+}
+
+// Keep our composer header rows each on their own line (core lays them inline).
+.LinkRobinsBlog-postComposer .ComposerBody-header > li {
+    display: block;
+    margin-right: 0;
+}
+
 .LinkRobinsBlog-editor {
     .Form-body {
         --gap: 18px;

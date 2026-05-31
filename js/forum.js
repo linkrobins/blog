@@ -422,6 +422,148 @@
         }
     }
 
+    // --- Real composer integration --------------------------------------
+    // Drive Flarum's real docked composer (app.composer) for the post body
+    // instead of embedding TextEditor inline -- that's the environment FoF Rich
+    // Text, FoF Upload, Mentions and Emoji are built for, so they all work as in
+    // a normal forum reply. Core ships ComposerBody in a lazily-loaded chunk
+    // (registered via flarum.reg.addChunkModule, not eagerly), so it's resolved
+    // on demand and cached.
+    var ComposerBodyBase  = null;
+    var BlogComposerClass = null;
+    var AvatarC              = null;
+    var ComposerPostPreviewC = null;
+    var usernameHelper       = null;
+    var COMPOSER_BODY_PATH = 'flarum/forum/components/ComposerBody';
+
+    function regComp(c) { return c && (c.default || c); }
+
+    function makeBlogComposer(ComposerBody) {
+        return class BlogComposer extends ComposerBody {
+            headerItems() {
+                var items = super.headerItems();
+                var defs = typeof this.attrs.blogHeaderItems === 'function'
+                    ? this.attrs.blogHeaderItems(this)
+                    : null;
+                if (defs && defs.length) {
+                    defs.forEach(function (d, i) {
+                        if (d == null) return;
+                        items.add(d.name || ('blog-header-' + i), d.content, d.priority || 0);
+                    });
+                }
+                return items;
+            }
+
+            onsubmit() {
+                var content = this.composer.fields.content();
+                if (typeof this.attrs.onBlogSubmit === 'function') {
+                    this.attrs.onBlogSubmit(content, this);
+                }
+            }
+        };
+    }
+
+    function ensureBlogComposer() {
+        if (BlogComposerClass) return Promise.resolve(BlogComposerClass);
+        try {
+            var loaded = flarum.reg.checkModule && flarum.reg.checkModule('core', 'forum/components/ComposerBody');
+            if (loaded) {
+                ComposerBodyBase = loaded.default || loaded;
+                BlogComposerClass = makeBlogComposer(ComposerBodyBase);
+                return Promise.resolve(BlogComposerClass);
+            }
+        } catch (e) {}
+        try {
+            if (flarum.reg.asyncModuleImport) {
+                return flarum.reg.asyncModuleImport(COMPOSER_BODY_PATH).then(function (mod) {
+                    ComposerBodyBase = (mod && mod.default) || mod || null;
+                    BlogComposerClass = ComposerBodyBase ? makeBlogComposer(ComposerBodyBase) : null;
+                    return BlogComposerClass;
+                }).catch(function (e) {
+                    console.error('[linkrobins/blog] could not load composer chunk:', e);
+                    return null;
+                });
+            }
+        } catch (e) {}
+        return Promise.resolve(null);
+    }
+
+    function blogComposerSupported() {
+        if (!app.composer || typeof app.composer.load !== 'function') return false;
+        if (BlogComposerClass) return true;
+        try {
+            if (flarum.reg.checkModule && flarum.reg.checkModule('core', 'forum/components/ComposerBody')) return true;
+            if (flarum.reg.chunkModules && typeof flarum.reg.chunkModules.has === 'function'
+                && flarum.reg.chunkModules.has('core:forum/components/ComposerBody')) return true;
+        } catch (e) {}
+        return false;
+    }
+
+    function openBlogComposer(attrs) {
+        if (!blogComposerSupported()) return false;
+        if (!attrs.user) attrs.user = app.session && app.session.user;
+        ensureBlogComposer().then(function (Cls) {
+            if (!Cls) return;
+            app.composer.load(Cls, attrs).then(function () {
+                app.composer.show();
+            });
+        });
+        return true;
+    }
+
+    function blogComposerOpenFor(contextKey) {
+        try {
+            if (!app.composer || !app.composer.isVisible || !app.composer.isVisible()) return false;
+            var bodyAttrs = app.composer.body && app.composer.body.attrs;
+            return !!(bodyAttrs && bodyAttrs.blogContext === contextKey);
+        } catch (e) { return false; }
+    }
+
+    function blogComposerContent() {
+        try {
+            if (app.composer && app.composer.fields && app.composer.fields.content) {
+                return app.composer.fields.content() || '';
+            }
+        } catch (e) {}
+        return '';
+    }
+
+    // Render the same "reply placeholder" Flarum shows at the end of a
+    // discussion: a click-to-compose box, or -- while the composer is open for
+    // this context -- a live preview of the body (ComposerPostPreview).
+    // opts: { composing, placeholder, onclick }.
+    function blogComposerPreview(opts) {
+        var Avatar = regComp(AvatarC);
+        var user   = app.session && app.session.user;
+
+        if (opts.composing && ComposerPostPreviewC) {
+            var Preview = regComp(ComposerPostPreviewC);
+            var uname   = regComp(usernameHelper);
+            return m('article', { className: 'Post CommentPost editing', 'aria-busy': 'true' },
+                m('div', { className: 'Post-container' }, [
+                    m('div', { className: 'Post-side' }, Avatar ? m(Avatar, { user: user, className: 'Post-avatar' }) : null),
+                    m('div', { className: 'Post-main' }, [
+                        m('header', { className: 'Post-header' },
+                            m('div', { className: 'PostUser' },
+                                m('h3', { className: 'PostUser-name' }, uname ? uname(user) : (user && user.username ? user.username() : '')))),
+                        m('div', { className: 'Post-body' },
+                            m(Preview, { className: 'Post-body', composer: app.composer })),
+                    ]),
+                ])
+            );
+        }
+
+        return m('button', {
+            type:      'button',
+            className: 'Post ReplyPlaceholder',
+            onclick:   opts.onclick,
+        }, m('div', { className: 'Post-container' }, [
+            m('div', { className: 'Post-side' }, Avatar ? m(Avatar, { user: user, className: 'Post-avatar' }) : null),
+            m('div', { className: 'Post-main' },
+                m('span', { className: 'Post-header' }, opts.placeholder)),
+        ]));
+    }
+
     function isFofUploadInstalled() {
         try {
             if (typeof flarum !== 'undefined' && flarum.extensions && flarum.extensions['fof-upload']) {
@@ -668,33 +810,18 @@
     // Opens the post editor modal. `post` is the raw JSON:API resource
     // (or null for a new post). `onSaved` is a callback that fires after
     // save or delete -- pages typically use this to refresh their data.
-    function openPostEditor(post, onSaved) {
-        if (!window.LinkRobinsBlogPostEditorModal) {
-            try { alert(tr('forum.edit_post.editor_not_available')); } catch (e) {}
-            return;
+    // Navigate to the post editor PAGE. `post` is the raw JSON:API resource (or
+    // null for a new post); when editing we stash it so the page can populate
+    // without an extra fetch. (Previously this opened a modal; it's now a full
+    // page so the docked composer can be used for the body.)
+    function openPostEditor(post) {
+        if (post && post.id) {
+            _pendingEditorPost = post;
+            m.route.set('/' + BLOG_SLUG + '/compose/' + encodeURIComponent(post.id));
+        } else {
+            _pendingEditorPost = null;
+            m.route.set('/' + BLOG_SLUG + '/compose');
         }
-        loadCategoriesForEditor(function (categories) {
-            try {
-                app.modal.show(window.LinkRobinsBlogPostEditorModal, {
-                    post:       post,
-                    categories: categories,
-                    onSaved:    function () {
-                        broadcastBlogRefresh({ type: 'save' });
-                        if (typeof onSaved === 'function') {
-                            try { onSaved(); } catch (e) {}
-                        }
-                    },
-                    onDeleted:  function (postId) {
-                        broadcastBlogRefresh({ type: 'delete', postId: postId });
-                        if (typeof onSaved === 'function') {
-                            try { onSaved(); } catch (e) {}
-                        }
-                    },
-                });
-            } catch (err) {
-                console.error('[linkrobins/blog] could not open editor:', err);
-            }
-        });
     }
 
     function init() {
@@ -712,22 +839,19 @@
         try { PageStructure    = flarum.reg.get('core', 'forum/components/PageStructure'); }     catch (e) {}
         try { IndexSidebar     = flarum.reg.get('core', 'forum/components/IndexSidebar'); }      catch (e) {}
         try { Modal            = flarum.reg.get('core', 'common/components/Modal'); }            catch (e) {}
+        try { AvatarC              = flarum.reg.get('core', 'common/components/Avatar'); }        catch (e) {}
+        try { ComposerPostPreviewC = flarum.reg.get('core', 'forum/components/ComposerPostPreview'); } catch (e) {}
+        try { usernameHelper       = flarum.reg.get('core', 'common/helpers/username'); }         catch (e) {}
 
         if (!Page) {
             console.error('[linkrobins/blog] Page component not available; aborting.');
             return;
         }
 
-        // The post editor modal is built on Flarum's Modal class so it lives
-        // inside init() rather than at module scope. Stash it on a closure
-        // variable that the sidebar/article code reaches into via the
-        // openPostEditor() helper below.
-        var PostEditorModal = Modal ? makePostEditorModal(Modal) : null;
-        window.LinkRobinsBlogPostEditorModal = PostEditorModal;
-
         var BlogIndexSidebar = IndexSidebar ? makeBlogIndexSidebar(IndexSidebar, LinkButton, Button) : null;
         var BlogIndexPage    = makeBlogIndexPage(Page, LoadingIndicator, PageStructure, LinkButton, BlogIndexSidebar);
         var BlogPostPage     = makeBlogPostPage(Page, LoadingIndicator, PageStructure, LinkButton, BlogIndexSidebar);
+        var BlogPostEditorPage = makePostEditorPage(Page, LoadingIndicator, PageStructure, BlogIndexSidebar);
 
         app.routes['linkrobins-blog.index']    = { path: '/' + BLOG_SLUG,                          component: BlogIndexPage };
         app.routes['linkrobins-blog.category'] = { path: '/category/:slug',                       component: BlogIndexPage };
@@ -739,6 +863,11 @@
             // pathname inside the page. The page sniffs window.location
             // to know when it's the drafts route.
         };
+        // Post authoring/editing pages. `/blog/compose` (new) must be registered
+        // before `/blog/:slug`-style routes; it and the edit route share the
+        // editor page.
+        app.routes['linkrobins-blog.compose']  = { path: '/' + BLOG_SLUG + '/compose',             component: BlogPostEditorPage };
+        app.routes['linkrobins-blog.edit']     = { path: '/' + BLOG_SLUG + '/compose/:id',         component: BlogPostEditorPage };
         app.routes['linkrobins-blog.post']     = { path: '/' + ARTICLE_SLUG + '/:slug',            component: BlogPostPage  };
 
         // Note: blog-comment discussions are now ordinary, visible Flarum
@@ -810,69 +939,148 @@
         }
     }
 
-    function makePostEditorModal(Modal) {
-        return class PostEditorModal extends Modal {
-            static get isDismissibleViaBackdropClick() { return false; }
+    // Stash for the post being edited, set by openPostEditor() right before it
+    // navigates to the editor page (so we don't need an extra fetch for the
+    // common in-app edit flow). Cleared once the page consumes it.
+    var _pendingEditorPost = null;
 
+    function makePostEditorPage(Page, LoadingIndicator, PageStructure, BlogIndexSidebar) {
+        return class BlogPostEditorPage extends Page {
             oninit(vnode) {
                 super.oninit(vnode);
+                var self = this;
 
-                var post = this.attrs.post;
-                var attr = post ? post.attributes : {};
-                var cat  = post ? (post.relationships
-                    && post.relationships.category
-                    && post.relationships.category.data) : null;
-
-                this.editId      = post ? post.id : null;
-                this.titleText   = attr.title       || '';
-                this.slug        = attr.slug        || '';
-                this.excerpt     = attr.excerpt     || '';
-                this.cover       = attr.coverImageUrl || '';
-                this.coverCredit    = attr.coverImageCredit    || '';
-                this.coverCreditUrl = attr.coverImageCreditUrl || '';
-                this.bodyText    = attr.content     || '';
-                this.visibility  = attr.visibility  || 'public';
-                this.categoryId  = cat ? cat.id : '';
-                this.isPublished = attr.isPublished === true;
-                // commentsEnabled defaults to true for new posts and for existing posts where the field isn't set
-                this.commentsEnabled = post ? (attr.commentsEnabled !== false) : true;
+                this.editId      = null;
+                this.loading     = true;
                 this.saving      = false;
                 this.error       = null;
+                this.categories  = [];
+                // Field state (defaults for a new post).
+                this.titleText      = '';
+                this.slug           = '';
+                this.excerpt        = '';
+                this.cover          = '';
+                this.coverCredit    = '';
+                this.coverCreditUrl = '';
+                this.bodyText       = '';
+                this.visibility     = 'public';
+                this.categoryId     = '';
+                this.isPublished    = false;
+                this.commentsEnabled = true;
+                this._userEditedSlug = false;
                 this.coverUploading   = false;
                 this.coverUploadError = null;
                 this.bodyUploading   = false;
                 this.bodyUploadIndex = 0;
                 this.bodyUploadTotal = 0;
                 this.bodyUploadError = null;
-                this._userEditedSlug = !!post;
+
+                if (!app.session || !app.session.user) {
+                    m.route.set(blogIndexRoute());
+                    return;
+                }
+
+                var routeId = (m.route.param && m.route.param('id')) || null;
+                this.editId = routeId || null;
+                try { app.setTitle(routeId ? tr('forum.edit_post.title_edit') : tr('forum.edit_post.title_create')); } catch (e) {}
+
+                // Load categories first, then populate from the stashed/fetched
+                // post (edit) or leave defaults (new).
+                loadCategoriesForEditor(function (categories) {
+                    self.categories = categories || [];
+                    if (routeId) {
+                        var stashed = (_pendingEditorPost && String(_pendingEditorPost.id) === String(routeId))
+                            ? _pendingEditorPost : null;
+                        _pendingEditorPost = null;
+                        if (stashed) {
+                            self._populateFromPost(stashed);
+                            self.loading = false;
+                            m.redraw();
+                        } else {
+                            // Direct navigation / refresh: fetch the post by id.
+                            fetchPost(routeId).then(function (resp) {
+                                if (resp && resp.data) self._populateFromPost(resp.data);
+                                self.loading = false;
+                                m.redraw();
+                            }).catch(function (err) {
+                                self.error   = err;
+                                self.loading = false;
+                                m.redraw();
+                            });
+                        }
+                    } else {
+                        self.loading = false;
+                        m.redraw();
+                    }
+                });
             }
 
-            className()  { return 'Modal--large LinkRobinsBlog-editorModal'; }
-            title()      { return this.editId ? tr('forum.edit_post.title_edit') : tr('forum.edit_post.title_create'); }
+            _populateFromPost(post) {
+                var attr = (post && post.attributes) || {};
+                var cat  = post ? (post.relationships
+                    && post.relationships.category
+                    && post.relationships.category.data) : null;
+                this.editId         = post ? post.id : this.editId;
+                this.titleText      = attr.title       || '';
+                this.slug           = attr.slug        || '';
+                this.excerpt        = attr.excerpt     || '';
+                this.cover          = attr.coverImageUrl || '';
+                this.coverCredit    = attr.coverImageCredit    || '';
+                this.coverCreditUrl = attr.coverImageCreditUrl || '';
+                this.bodyText       = attr.content     || '';
+                this.visibility     = attr.visibility  || 'public';
+                this.categoryId     = cat ? cat.id : '';
+                this.isPublished    = attr.isPublished === true;
+                this.commentsEnabled = attr.commentsEnabled !== false;
+                this._userEditedSlug = true;
+            }
 
-            content() {
+            _wrap(inner) {
+                if (PageStructure && BlogIndexSidebar) {
+                    return m(PageStructure, {
+                        className: 'IndexPage LinkRobinsBlog-page',
+                        sidebar:   function () { return m(BlogIndexSidebar, { className: 'LinkRobinsBlog-sidebar' }); },
+                    }, inner);
+                }
+                return m('div', { className: 'IndexPage LinkRobinsBlog-page' }, inner);
+            }
+
+            view() {
                 var self = this;
-                return m('div', { className: 'Modal-body LinkRobinsBlog-editor' }, [
-                    self.error ? m('div', { className: 'Alert Alert--danger' }, [
-                        m('span', { className: 'Alert-body' }, tr('forum.edit_post.save_failed', { detail: self._errorMessage() })),
-                    ]) : null,
-                    m('div', { className: 'Form-body' }, [
-                        self._renderTitleAndSlug(),
-                        self._renderExcerpt(),
-                        self._renderCover(),
-                        self._renderMeta(),
-                        m('div', { className: 'LinkRobinsBlog-editor-bodyWrapper' }, [
-                            self._renderToolbar(),
-                            self._renderBody(),
+
+                if (self.loading) {
+                    return self._wrap(
+                        m('div', { className: 'LinkRobinsBlog-editor LinkRobinsBlog-editor--page' },
+                            LoadingIndicator ? m(LoadingIndicator) : tr('forum.index.loading'))
+                    );
+                }
+
+                return self._wrap(
+                    m('div', { className: 'LinkRobinsBlog-editor LinkRobinsBlog-editor--page' }, [
+                        m('h1', { className: 'LinkRobinsBlog-editor-pageTitle' },
+                            self.editId ? tr('forum.edit_post.title_edit') : tr('forum.edit_post.title_create')),
+                        self.error ? m('div', { className: 'Alert Alert--danger' }, [
+                            m('span', { className: 'Alert-body' }, tr('forum.edit_post.save_failed', { detail: self._errorMessage() })),
+                        ]) : null,
+                        m('div', { className: 'Form-body' }, [
+                            self._renderTitleAndSlug(),
+                            self._renderExcerpt(),
+                            self._renderCover(),
+                            self._renderMeta(),
+                            m('div', { className: 'LinkRobinsBlog-editor-bodyWrapper' }, [
+                                self._renderToolbar(),
+                                self._renderBody(),
+                            ]),
                         ]),
-                    ]),
-                    self._renderActions(),
-                ]);
+                        self._renderActions(),
+                    ])
+                );
             }
 
             _errorMessage() {
                 var err = this.error;
                 if (!err) return tr('forum.edit_post.unknown_error');
+                if (err._local) return err._local;
                 try {
                     var errors = err.response && err.response.errors;
                     if (errors && errors[0]) {
@@ -1056,7 +1264,7 @@
                             onchange:  function (e) { self.categoryId = e.target.value; },
                         }, [
                             m('option', { value: '' }, tr('forum.edit_post.category_none')),
-                            (self.attrs.categories || []).map(function (cat) {
+                            (self.categories || []).map(function (cat) {
                                 return m('option', { value: cat.id, key: 'c-' + cat.id }, cat.attributes.name);
                             }),
                         ]),
@@ -1090,6 +1298,10 @@
 
             _renderToolbar() {
                 var self = this;
+
+                // With the real docked composer, the body is written there (its
+                // own toolbar + FoF Upload button), so no page toolbar is needed.
+                if (blogComposerSupported()) return null;
 
                 // When Flarum's editor is embedded, its own Markdown toolbar
                 // replaces these formatting buttons; we keep only the image-
@@ -1176,28 +1388,19 @@
             _renderBody() {
                 var self = this;
                 var hasFofUpload = isFofUploadInstalled();
-                var TextEditor = getTextEditor();
 
                 var bodyInput;
-                if (TextEditor) {
-                    // Flarum's composer editor: Markdown toolbar + @mentions.
-                    // The keyed editor must be the sole child of an unkeyed
-                    // wrapper (mithril forbids mixed keyed/unkeyed siblings).
-                    // It's uncontrolled, but this editor is a Modal that mounts
-                    // fresh each open, so there's no external value to re-sync.
-                    if (!self._bodyComposer) self._bodyComposer = {};
-                    bodyInput = m('div', { className: 'LinkRobinsBlog-editorWrap' }, m(TextEditor, {
-                        key:         'lr-blog-body',
-                        composer:    self._bodyComposer,
-                        value:       self.bodyText,
-                        disabled:    self.saving,
-                        placeholder: tr('forum.edit_post.body_placeholder'),
-                        submitLabel: tr('forum.edit_post.publish_button'),
-                        onchange:    function (v) { self.bodyText = v; },
-                        // The editor's own submit is hidden; the post's
-                        // Publish / Save-draft buttons are the real actions.
-                        onsubmit:    function () {},
-                    }));
+                if (blogComposerSupported()) {
+                    // Write the body in Flarum's real docked composer (rich text,
+                    // FoF Upload, @mentions and emoji all work). The page shows
+                    // the same click-to-write placeholder + live preview used at
+                    // the end of a discussion.
+                    bodyInput = m('div', { className: 'LinkRobinsBlog-bodyPlaceholder' },
+                        blogComposerPreview({
+                            composing:   blogComposerOpenFor('post-body'),
+                            placeholder: tr('forum.edit_post.body_placeholder_click'),
+                            onclick:     function () { self._openBodyComposer(); },
+                        }));
                 } else {
                     bodyInput = m('textarea', {
                         id:         'LinkRobinsBlog-editor-body',
@@ -1322,10 +1525,16 @@
                 processNext(0);
             }
 
+            // Live body text: the composer's content while it's open for this
+            // post, otherwise the last-synced value.
+            _currentBody() {
+                return blogComposerOpenFor('post-body') ? blogComposerContent() : (this.bodyText || '');
+            }
+
             _renderActions() {
                 var self = this;
                 var hasTitle = (self.titleText || '').trim() !== '';
-                var hasBody  = (self.bodyText  || '').trim() !== '';
+                var hasBody  = (self._currentBody()).trim() !== '';
                 var canSave  = hasTitle && hasBody && !self.saving;
 
                 var children = [
@@ -1350,7 +1559,7 @@
                             type:      'button',
                             className: 'Button Button--text',
                             disabled:  self.saving,
-                            onclick:   function () { self.hide(); },
+                            onclick:   function () { self._leaveEditor(); },
                         }, tr('forum.edit_post.cancel_button')),
                     ]),
                 ];
@@ -1367,18 +1576,9 @@
                                 self.error  = null;
                                 m.redraw();
                                 deleteBlogPost(self.editId).then(function () {
-                                    // Prefer onDeleted (specifically signals
-                                    // the post is gone); fall back to
-                                    // onSaved for callers that don't
-                                    // differentiate.
-                                    var deletedCb = self.attrs && self.attrs.onDeleted;
-                                    var savedCb   = self.attrs && self.attrs.onSaved;
-                                    if (typeof deletedCb === 'function') {
-                                        try { deletedCb(self.editId); } catch (e) {}
-                                    } else if (typeof savedCb === 'function') {
-                                        try { savedCb(); } catch (e) {}
-                                    }
-                                    self.hide();
+                                    self._closeComposer();
+                                    broadcastBlogRefresh({ type: 'delete', postId: self.editId });
+                                    m.route.set(blogIndexRoute());
                                 }).catch(function (err) {
                                     self.saving = false;
                                     self.error  = err;
@@ -1392,17 +1592,79 @@
                 return m('div', { className: 'LinkRobinsBlog-editor-actions' }, children);
             }
 
-            _save(publishFlag) {
+            // Open the docked composer to write the post body. The body editor
+            // (rich text / upload / mentions / emoji) lives there; the page's
+            // Publish / Save-draft buttons read its content at save time. The
+            // composer's own submit triggers the primary action (Publish/Update).
+            _openBodyComposer() {
                 var self = this;
+                var primaryLabel = self.editId
+                    ? (self.isPublished ? tr('forum.edit_post.update_button') : tr('forum.edit_post.publish_button'))
+                    : tr('forum.edit_post.publish_button');
+                openBlogComposer({
+                    blogContext:     'post-body',
+                    className:       'LinkRobinsBlog-postComposer',
+                    placeholder:     tr('forum.edit_post.body_placeholder'),
+                    submitLabel:     primaryLabel,
+                    confirmExit:     tr('forum.edit_post.discard_confirm'),
+                    originalContent: self.bodyText || '',
+                    blogHeaderItems: function () {
+                        return [{
+                            name:    'title',
+                            content: m('h3', { className: 'LinkRobinsBlog-composerTitle' }, [
+                                m('i', { className: 'fas fa-feather-alt' }), ' ',
+                                (self.titleText || '').trim() || tr('forum.edit_post.title_create'),
+                            ]),
+                        }];
+                    },
+                    onBlogSubmit: function (content, body) {
+                        self._save(true, content, body);
+                    },
+                });
+            }
+
+            _closeComposer() {
+                try {
+                    if (blogComposerOpenFor('post-body') && app.composer && app.composer.hide) {
+                        app.composer.hide();
+                    }
+                } catch (e) {}
+            }
+
+            _leaveEditor() {
+                try {
+                    if (blogComposerOpenFor('post-body') && app.composer && app.composer.close) {
+                        app.composer.close();
+                    }
+                } catch (e) {}
+                m.route.set(blogIndexRoute());
+            }
+
+            // Save the post. Called from the page buttons (no content arg -- it
+            // reads the live composer/textarea body) or from the composer submit
+            // with (publishFlag=true, content, composerBody).
+            _save(publishFlag, content, composerBody) {
+                var self = this;
+                var bodyText = (typeof content === 'string') ? content : self._currentBody();
+                self.bodyText = bodyText;
+
+                if (!(self.titleText || '').trim() || !(bodyText || '').trim()) {
+                    self.error = { _local: tr('forum.edit_post.title_body_required') };
+                    if (composerBody) composerBody.loading = false;
+                    m.redraw();
+                    return;
+                }
+
                 self.saving = true;
                 self.error  = null;
+                if (composerBody) composerBody.loading = true;
                 m.redraw();
 
                 var attributes = {
                     title:               self.titleText.trim(),
                     slug:                self.slug.trim() || slugify(self.titleText),
                     excerpt:             self.excerpt || '',
-                    content:             self.bodyText,
+                    content:             bodyText,
                     coverImageUrl:       self.cover || null,
                     coverImageCredit:    (self.coverCredit && self.coverCredit.trim()) || null,
                     coverImageCreditUrl: (self.coverCreditUrl && self.coverCreditUrl.trim()) || null,
@@ -1410,9 +1672,7 @@
                     isPublished:         publishFlag,
                     commentsEnabled:     self.commentsEnabled !== false,
                 };
-                if (publishFlag && !self.editId) {
-                    attributes.publishedAt = new Date().toISOString();
-                } else if (publishFlag && self.editId && !self.isPublished) {
+                if (publishFlag && (!self.editId || !self.isPublished)) {
                     attributes.publishedAt = new Date().toISOString();
                 }
 
@@ -1424,13 +1684,25 @@
                     : createBlogPost(attributes, categoryId);
 
                 promise
-                    .then(function () {
+                    .then(function (resp) {
                         self.saving = false;
-                        if (typeof self.attrs.onSaved === 'function') self.attrs.onSaved();
-                        self.hide();
+                        self._closeComposer();
+                        if (composerBody && composerBody.composer) {
+                            try { composerBody.composer.hide(); } catch (e) {}
+                        }
+                        broadcastBlogRefresh({ type: 'save' });
+                        invalidateCategoriesCache();
+                        // Go to the published article, or the drafts list for a draft.
+                        var post = resp && resp.data;
+                        if (publishFlag && post) {
+                            m.route.set(postPath(post));
+                        } else {
+                            m.route.set('/' + BLOG_SLUG + '/drafts');
+                        }
                     })
                     .catch(function (err) {
                         self.saving = false;
+                        if (composerBody) composerBody.loading = false;
                         self.error  = err;
                         console.error('[linkrobins/blog] save failed:', err);
                         m.redraw();

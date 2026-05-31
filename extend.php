@@ -29,6 +29,10 @@ return [
         ->css(__DIR__ . '/less/forum.less')
         ->route('/blog',                                'linkrobins-blog.index',       BlogIndex::class)
         ->route('/blog/drafts',                         'linkrobins-blog.drafts',      BlogDrafts::class)
+        // Post authoring pages (SPA-only; no SSR content class). Registered so a
+        // direct load / refresh of the editor URL serves the app shell.
+        ->route('/blog/compose',                        'linkrobins-blog.compose')
+        ->route('/blog/compose/{id}',                   'linkrobins-blog.edit')
         ->route('/category/{slug}',                     'linkrobins-blog.category',    BlogCategoryShow::class)
         ->route('/article/{slug}',                      'linkrobins-blog.post',        BlogPostShow::class)
         ->route('/linkrobins-blog/unsubscribe/{token}', 'linkrobins-blog.unsubscribe', Unsubscribe::class),
